@@ -37,7 +37,7 @@ for s=1:numSubj
         invS     = (L'\(L\eye(N)));
         W        = alpha*alpha'-invS;           % this is (alpha*alpha' - inv(S))
         for i=1:numReg
-            dnlml(i,s) = -1/2*sum(sum(W.*s);            % Derivative of L
+            dnlml(i,s) = -1/2*sum(sum(W.*s));            % Derivative of L
         end; 
     end;
     if (nargout>2)

@@ -56,14 +56,14 @@ if (isfield(Model,'X'))
     % if (~isfield(Model.ridgeparam))
     %     Model.ridgeparam=[1:numReg]; 
     % end; 
-    theta0 = zeros(numReg,1);               % variance parameters: number of regressors    
-    theta  = minimize(theta0,@rsa_marglRidgeIndividEB,4,X,Y,SigmaDist);  % Minmize the ridge parameter for the group 
-    [~,~,omega,~,nlml]=rsa_marglRidgeIndividEB(theta, X, Y, SigmaDist);      % Estimate the regression coefficients seperately 
+    theta0 = zeros(numReg,1);                                               % variance parameters: number of regressors    
+    theta  = minimize(theta0,@rsa_marglRidgeIndividEB,4,X,Y,SigmaDist);     % Minmize the ridge parameter for the group 
+    [~,~,omega,~,nlml]=rsa_marglRidgeIndividEB(theta, X, Y, SigmaDist);     % Estimate the regression coefficients seperately 
 else
-    theta0 = [zeros(Model.numPrior,1);Model.nonlinP0'];                      % Add the variance parameters
-    theta  = minimize(theta0,@rsa_marglNonlin,4,Model,Y,SigmaDist);  % Minmize the ridge parameter for the group 
-    [~,~,omega,~,nlml]=rsa_margNonlin(theta, Model, Y, SigmaDist);   % Estimate the regression coefficients seperately 
-    keyboard; 
+    theta0              = [zeros(Model.numPrior,1);Model.nonlinP0'];                % Add the variance parameters
+    [theta, nlmls]      = minimize(theta0,@rsa_marglNonlin,[1000 100],Model,Y,SigmaDist);    % Minmize the ridge parameter for the group 
+    [~,~,omega,~,nlml]  = rsa_marglNonlin(theta, Model, Y, SigmaDist);              % Estimate the regression coefficients seperately 
+    %keyboard; 
 end;     
 omega       =  omega'; 
 logEvidence =  -nlml'; 
@@ -72,8 +72,9 @@ theta    = theta';
 % Also return the logEvidence split by different regressors (remove at some
 % point?) 
 if nargout>3 
-    V0 = diag(exp(theta)); 
-    [mL1,mL2]=rsa.stat.marglRidgeSplit(V0, X, Y, SigmaDist);      % Estimate the regression coefficients seperately 
+    X=permute(Model.RDM,[2 1 3]); 
+    V0 = diag(exp(theta(1:Model.numPrior))); 
+    [mL1,mL2]=rsa.stat.marglRidgeSplit(V0, X, Y, SigmaDist);                % Estimate the regression coefficients seperately 
     logEvidenceSplit=[mL1 mL2];    
 end; 
         
