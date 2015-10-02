@@ -12,9 +12,9 @@ function Model=sh1_getRDMmodelTau1(logtau,chunkset,components,distfun);
 %          onedigit       (1)
 %          twodigit       (2)
 %          threedigit     (3)
-%          sequence       (4)
+%          chunk          (4)
 %          superchunk     (5)
-%          chunk          (6)
+%          sequence       (6)
 %   distfun:
 %          Distance function for activtion (cityblock, sqEucledian)
 % OUTPUT:
@@ -118,10 +118,10 @@ chunksets = unique(chunkset);
 for i=1:numComp
     for c = chunksets   % precalculate all necessary chunksets 
         Feature       = Features{c,components(i)};
-        numTimep      = size(Feature,3);                                   % Number of time points
+        numTimep      = size(Feature,3);                                    % Number of time points
         t             = [0:numTimep-1]/numTimep;
-        tempWeight    = exp(-t*exp(-logtau(i)));                            % Calculate weighting factor
-        dTempWeight   = tempWeight.*t.*exp(-logtau(i));
+        tempWeight    = exp(-t*exp(-logtau(i)));                            % Calculate weighting factor        
+        dTempWeight   = tempWeight.*t.*exp(-logtau(i));                     % This is a derivative wrt logtau
         wFeature      = bsxfun(@times,Feature,permute(tempWeight,[1 3 2]));          % Multiply every time slice with the weight
         Pattern       = sum(wFeature,3); % Integrate over time
         dwFeature      = bsxfun(@times,Feature,permute(dTempWeight,[1 3 2]));          % Multiply every time slice with the weight
@@ -134,12 +134,16 @@ for i=1:numComp
                 Model.RDM(i,:)=sum(abs(Con*Pattern),2)';
             case 'sqEuclidean'
                 Model.RDM(i,:,c)          = sum((Con*Pattern).^2,2)';
-                Model.dRDMdTheta(:,:,i,c) = zeros(numParam,numDist);
-                Model.dRDMdTheta(i,:,i,c) = sum(Con*(Pattern.*dPattern+ dPattern.*Pattern),2)'; % Product rulke
+                Model.dRDMdTheta(:,:,i,c) = zeros(numParam,numDist);                
+                Model.dRDMdTheta(i,:,i,c) = sum(2*(Con*dPattern).*(Con*Pattern),2); % Fix: corrected derivative
+            otherwise
+                error('wrong parameter for distfun');
         end;
     end;
 end;
 
 % Expand the models for the different subjects 
-Model.RDM        = Model.RDM(:,:,chunkset); 
-Model.dRDMdTheta = Model.dRDMdTheta(:,:,:,chunkset); 
+Model.RDM = Model.RDM(:,:,chunkset); 
+if strcmp(distfun,'sqEuclidean')
+    Model.dRDMdTheta = Model.dRDMdTheta(:,:,:,chunkset);    
+end
