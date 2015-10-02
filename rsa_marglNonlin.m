@@ -65,8 +65,8 @@ for s=1:numSubj
     end; 
 
     S = Sigma(:,:,s) + X(:,:,s)*V0*X(:,:,s)' ;                              % Compute training set covariance matrix
-    L = chol(S)';                                                           % Hack: Cholesky factorization of the covariance
-    alpha = solve_chol(L',Y(:,s));                                          % Hack: Convenience function (=S^-1*Y)
+    L = chol(S)';                                                           % Cholesky factorization of the covariance
+    alpha = solve_chol(L',Y(:,s));                                          % Convenience function (=S^-1*Y)
     
     % Negative log-likihood
     nlml(s)  = 0.5*sum(sum(alpha.*Y(:,s),2)) + sum(log(diag(L))) + 0.5*N*log(2*pi);  
@@ -82,16 +82,9 @@ for s=1:numSubj
             dnlml(i,s) = -1/2*sum(sum(W.*(XX(:,:,i))))*thetai;              
         end; 
         % Derivative of negative log-likelihood wrt nonlinear parameters
-        % (ay) may need some hack to speed up
-        dSdTheta = zeros(N,N);
         for i=1:Model.numNonlin
-           for d=1:N
-              for dd=1:N                  
-                  dSdTheta(d,dd) = dX(d,:,i,s)*V0*X(dd,:,s)' + X(d,:,s)*V0*dX(dd,:,i,s)';           
-              end
-           end
-           thetai = 1;%exp(nonlinP(i)); no need for log-transform here
-           dnlml(Model.numPrior+i,s) = -1/2*sum(sum(W.*dSdTheta))*thetai;
+           dSdTheta = dX(:,:,i,s)*V0*X(:,:,s)' + X(:,:,s)*V0*dX(:,:,i,s)';           
+           dnlml(Model.numPrior+i,s) = -1/2*sum(sum(W.*dSdTheta));
         end 
     end;
     
