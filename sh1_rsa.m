@@ -16,6 +16,7 @@ volumenames = {'/Volumes/HD-PEBU2/Windows/myBackup/ICN/',...
     '/Users/joern/Projects'};%
 
 baseDir         = '/Users/joern/Projects/sh1';   % For Joern
+baseDir         = '/Volumes/DATA/MotorControl/data/SequenceLearning/sh1';   % For AY
 
 fieldmapsDir    = fullfile(baseDir, 'fieldmaps');
 behaviourDir    = fullfile(baseDir, 'data');
@@ -241,7 +242,9 @@ switch(what)
         varargout={T}; 
     case 'fit_model_EB_nonlin' 
         T=load(fullfile(regDir,'distances_sepPerm.mat')); 
+%         T=load(fullfile(regDir,'distances_glm1.mat')); T=T.RDM1;
         regions=unique(T.region); 
+        regions=[1:8]';
         for r=regions' 
             for h=[1 2] 
                 indx = find(T.region==r & T.hemis==h); 
@@ -253,19 +256,35 @@ switch(what)
                 Model.numComp   = 4; % Number of linear components 
                 Model.numPrior  = 4; % Number of prior variances on parameters
                 Model.numNonlin = 4; % Number of nonlinear parameters 
-                Model.nonlinP0  = [-2 1 0 0]; % Starting value of nonlinear(mixing) parameters 
+                Model.nonlinP0  = [0 0 0 0]; % Starting value of nonlinear(mixing) parameters 
                 Model.constantParams = {chunk_set(D.subj),...       % Model terms 
                                         [1 2 4 6],...               % Chunk set 
                                         'sqEuclidean'...            % Distance term               
                                         };  
-                [omega(indx,:),logEvidence(indx,:),lt]=rsa_fitModelHierarchEB(Model,D.RDM,Sigma,9,D.effVox);
+                [w,logEvidence(indx,:),lt]=rsa_fitModelHierarchEB(Model,D.RDM,Sigma,9,D.effVox);
                 logtheta(indx,:)=repmat(lt,length(indx),1); 
+                
+                % normalize omega
+                M = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
+                          Model.constantParams{:});
+                omega(indx,:) = w.*permute(mean(M.RDM,2),[3 1 2]);      
             end; 
         end; 
         T.omega=omega; 
         T.logtheta=logtheta; 
+        %T.logEvidenceSplit = logEvidenceSplit;
+        
+        sh1_rsa('plot',T);
         varargout={T}; 
-
+    case 'plot'
+        T=varargin{1};
+        
+        figure;
+        for reg=1:8;
+            subplot(8,1,reg);
+            myboxplot(T.hemis,T.omega,'subset',T.region==reg);
+            drawline(0,'dir','horz');
+        end
     otherwise
         disp('there is no such case.')
 end;

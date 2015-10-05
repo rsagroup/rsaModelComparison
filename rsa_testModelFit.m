@@ -323,42 +323,16 @@ switch (what)
         barplot([],[S.logEInSplit]);
         
         varargout={S};
-    case 'test_bayesRegressHierarchical'% Test the Hierarchical Bayesian model fitting
-        % Determines the regularisation and sigma from a group of
-        % numParticipants measures
-                
-         % mode select
-         test = varargin{1};
-                
+    case 'yokoiModel_synth'               % simulate Yokoi model of chunking experiment         
         % True hyper parameters
-        tau = [0.1 1 1 1000];        % temporal decay of features 
-        v   = [1 1 1 1];            % variance of true omegas
-        w0  = [2 0 0 0];            % mean of true omegas;        
-        logtau  = log(tau);             % log of tau
-        logV    = log(v);               % log of v
-        Theta   = [logV, logtau];       % total parameters
+        modelTerms  = varargin{1};
+        tau         = varargin{2};        % temporal decay of features 
+        v           = varargin{3};            % variance of true omegas
+        w0          = varargin{4};            % mean of true omegas;        
         
-        % Define model structure (using one-digit, two-digit, chunk, and
-        % sequence models)
-        constantParams  = {1,[1 2 4 6],'sqEuclidean'};
-        Model           = sh1_getRDMmodelTau1(logtau,constantParams{:});
-        for m=1:numel(Model.name)
-            Model.name{m} = sprintf('%s (logtau=%2.0d)',Model.name{m},logtau(m));
-        end
-        % adjust model strength to mean 1
-        % Model.RDM = bsxfun(@rdivide,Model.RDM,mean(Model.RDM,2));
-        figure(1);
-        rsa.fig.imageRDMs(Model);        
-        Model.numComp           = 4;
-        Model.numPrior          = 4;
-        Model.numNonlin         = 4;
-        Model.nonlinP0          = [0 0 0 0];
-        Model.constantParams    = constantParams;
-        Model.fcn               = @sh1_getRDMmodelTau1;
-                
-        % Generate simulated data and distance
-        D.numExp    = 5;     % 100 Experiments
-        D.numSubj   = 5;     % 12 Partitipants
+        % Experimental parameters
+        D.numExp    = 1;     % 100 Experiments
+        D.numSubj   = 14;     % 12 Partitipants
         D.numSim    = D.numExp * D.numSubj;        
         D.var_e     = 50;
         D.numPart   = 8;        
@@ -366,124 +340,143 @@ switch (what)
         D.omega     = repmat(w0,D.numSim,1); 
         % mvnrnd(w0,diag(v),D.numSim);
         % D.omega     = ssqrt(D.omega.*D.omega);
+        D           = getUserOptions({varargin{5:end}},D);
         
-        % figure(2)
-        % histplot(D.omega,'numcat',20);
-                
-        [S,Y,D,Sigma] = rsa_testModelFit('simulate_data',Model,D);
+        % Define model structure (using one-digit, two-digit, chunk, and
+        % sequence models)
+        logtau          = log(tau);             % log of tau
+        constantParams  = {1,modelTerms,'sqEuclidean'}; %[1 2 4 6]
+        Model           = sh1_getRDMmodelTau1(logtau,constantParams{:});
+        Model.name_orig = Model.name;
+        for m=1:numel(Model.name)
+            Model.name{m} = sprintf('%s (logtau=%2.0d)',Model.name{m},logtau(m));
+        end
+        figure(1);
+        rsa.fig.imageRDMs(Model);        
+        Model.constantParams    = constantParams;
+        Model.numComp           = numel(modelTerms);
+        Model.numPrior          = numel(v);
+        Model.numNonlin         = numel(tau);
+        Model.nonlinP0          = zeros(1,Model.numNonlin);
+        Model.constantParams    = constantParams;
+        Model.fcn               = @sh1_getRDMmodelTau1;        
+        
+        % Simulate data
+        [S,~,D,Sigma] = rsa_testModelFit('simulate_data',Model,D);
         S.exp   = kron([1:D.numExp]',ones(D.numSubj,1));
         S.subj  = kron(ones(D.numExp,1),[1:D.numSubj]');
         
-        switch test
-            case 'checkgrad'
-                ptb = varargin{2};
+        % adjust true value based on mean of X
+        meanX_true      = mean(Model.RDM,2);
+        S.omega_true    = bsxfun(@times,D.omega,meanX_true');
+        
+        varargout = {S,D,Sigma,Model};                
+    case 'test_HierarchEB_checkgrad'            % check if derivatives of logmerginallikelihood are correct
+        ptb = varargin{1};
+        
+        % True hyper parameters
+        modelTerms  = [1 2 4 6];
+        tau         = [0.05 13 5 1000];        % temporal decay of features 
+        v           = [1 1 1 1];            % variance of true omegas
+        w0          = [3 0 0 0];            % mean of true omegas;        
                 
-                % Check gradients for safety
-                numDist = size(S.RDM,2);
-                C       = indicatorMatrix('allpairs',[1:D.numCond]);
-                for iter=1:100
-                    % Make sigma
-                    for s=1:D.numSim
-                        SigmaDist(:,:,s) = rsa_varianceLDC(zeros(1,numDist),C,Sigma(:,:,s),D.numPart,D.numVox);
-                    end;
-                    
-                    theta0 = 10*rand(size(Theta));
-                    diff(iter)=checkgrad('rsa_marglNonlin',theta0',ptb,Model,S.RDM',SigmaDist);
-                    fprintf('theta=[');
-                    fprintf('%3.0f, ',theta0);
-                    fprintf(']\n');
-                end            
-            case 'estimate'
-                % Estimate both group hyper parameters using all data and then
-                %   estimate omega
-                for i=1:D.numExp
-                    indx = find(S.exp==i);                    
-                    [S.omega_hat(indx,:),logEvidence,theta] = ...
-                        rsa_fitModelHierarchEB(Model,S.RDM(indx,:),Sigma(:,:,indx),D.numPart,repmat(D.numVox,D.numSim,1));
-                
-                    % Summary result
-                    S.logvarV(indx,:) = kron(ones(D.numSubj,1),theta(1:Model.numPrior)); 
-                    S.logtau(indx,:)  = kron(ones(D.numSubj,1),theta(Model.numPrior+1:end)); 
-                end; 
-                S.omega_true=D.omega;
-                % Plot result: omegas
-                figure(2);
-                subplot(2,2,1); 
-                barplot([],S.omega_true); 
-                title('true \omega'); 
-                
-                subplot(2,2,2); 
-                myboxplot([],S.omega_hat); 
-                drawline(0,'dir','horz'); 
-                title('estimated \omega'); 
-                
-                % Prior parameters 
-                subplot(2,2,3);                 
-                barplot([],S.logvarV);
-                title('Group-wise hyper parameters log prior var','fontsize',12);
-                
-                % Nonlinear parameters 
-                subplot(2,2,4)
-                barplot([],S.logtau);
-                title('Group-wise hyper parameters log tau','fontsize',12);
-                
-                varargout={S};
-            case 'compare'
-                
-                % 1. Estimate both group hyper parameters using all data and then estimate omega
-                [omegaHEB,logEvidence,logtheta,logEvidenceSplit] = ...
-                    rsa_fitModelHierarchEB(Model,S.RDM,Sigma,D.numPart,repmat(D.numVox,D.numSim,1));
-                fitHEB = repmat(5,D.numSim,1);
-                
-                % 2. re-create models based on estimate of theta
-                Model_hat       = Model;
-                M               = sh1_getRDMmodelTau1(logtheta(Model.numPrior+1:end),constantParams{:});
-                Model_hat.RDM   = M.RDM;
-                
-                for i=1:D.numExp
-                    indx = find(S.exp==i);                    
-                    % GLS fitting: Assuming the noise covariance based on all distances zero
-                    omegaGLS(indx,:) =...
-                        rsa.stat.fitModelGLS(Model_hat,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
-                    fitGLS(indx,1) = 1;
-                    
-                    % IRLS fitting: Taking into account the noise covariance under
-                    % the current model fit
-                    omegaIRLS(indx,:) =...
-                        rsa.stat.fitModelIRLS(Model_hat,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
-                    fitIRLS(indx,1) = 2;
-                    
-                    % IRLS with ridge: use estimated variance
-                    omegaIRLSr(indx,:) =...
-                        rsa.stat.fitModelIRLS(Model_hat,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox,...
-                        'priorVar',mean(exp(logtheta(1:Model.numPrior))));
-                    fitIRLSr(indx,1) = 3;
-                    
-                    
-                    % Using Individual ridge paramtersestimated by empirical Bayes
-                    [omegaIN(indx,:),S.logEIn(indx,1),lT,S.logEInSplit(indx,:)]=...
-                        rsa.stat.fitModelRidgeIndividEB(Model_hat,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
-                    S.logthetaIn(indx,:)=repmat(lT,length(indx),1);
-                    fitIN(indx,1) = 4;                    
-                end;
-               
-                T.omega = [omegaGLS;omegaIRLS;omegaIRLSr;omegaIN;omegaHEB];
-                T.fit = [fitGLS;fitIRLS;fitIRLSr;fitIN;fitHEB];
-                T.omega_true = repmat(D.omega,5,1);
-                
-                % Plot
-                figure;
-                for o=1:4
-                    subplot(1,4,o)
-                    scatterplot(T.omega_true(:,o),T.omega(:,o)/D.numVox,'split',T.fit,'identity');
-                end
-                figure;
-                subplot(1,2,1)
-                scatterplot(Theta(1:Model.numPrior)',logtheta(1:Model.numPrior)','identity');hold on
-                
-                subplot(1,2,2)
-                scatterplot(Theta(1+Model.numPrior:end)',logtheta(1+Model.numPrior:end)','identity');hold on
+        % Synthesise data with given hyper parameters
+        [S,D,Sigma,Model] = rsa_testModelFit('yokoiModel_synth',modelTerms,tau,v,w0);                
+        
+        % Check gradients for safety
+        numDist = size(S.RDM,2);
+        C       = indicatorMatrix('allpairs',[1:D.numCond]);
+        for iter=1:10
+            % Make sigma
+            for s=1:D.numSim
+                SigmaDist(:,:,s) = rsa_varianceLDC(zeros(1,numDist),C,Sigma(:,:,s),D.numPart,D.numVox);
+            end;
+            
+            theta0 = 10*rand(size(Theta));
+            diff(iter)=checkgrad('rsa_marglNonlin',theta0',ptb,Model,S.RDM',SigmaDist);
+            fprintf('theta=[');
+            fprintf('%3.0f, ',theta0);
+            fprintf(']\n');
         end
+    case 'test_HierarchEB_estimate_yokoiModel'  % test model by estimating 
+        % True hyper parameters
+        modelTerms  = [1 2 4 6];
+        tau         = [0.05 13 5 1000];         % temporal decay of features 
+        v           = [1 1 1 1];                % variance of true omegas
+        w0          = [0 3 0 0];                % mean of true omegas;        
+
+        % Synthesise data with given hyper parameters
+        [S,D,Sigma,Model] = rsa_testModelFit('yokoiModel_synth',modelTerms,tau,v,w0);
+               
+        % Estimate both group hyper parameters using all data and then
+        %   estimate omega
+        
+        % Redifine model for fit
+        constantParams          = Model.constantParams;
+        reducedModelTerms       = [1 2 4 6]; 
+        constantParams{2}       = reducedModelTerms;
+        Model                   = sh1_getRDMmodelTau1(zeros(length(reducedModelTerms)),constantParams{:});
+        Model.constantParams    = {1,reducedModelTerms,'sqEuclidean'}; %[1 2 4 6]
+        Model.numComp           = numel(reducedModelTerms);
+        Model.numPrior          = numel(reducedModelTerms);
+        Model.numNonlin         = numel(reducedModelTerms);
+        Model.nonlinP0          = zeros(1,Model.numNonlin);
+        Model.constantParams    = constantParams;
+        Model.fcn               = @sh1_getRDMmodelTau1; 
+        Model.name_orig         = Model.name;
+        
+        for i=1:D.numExp
+            indx = find(S.exp==i);
+            [omega,logEvidence,theta,S.logEvidenceSplit(indx,:)] = ...
+                rsa_fitModelHierarchEB(Model,S.RDM(indx,:),Sigma(:,:,indx),D.numPart,repmat(D.numVox,D.numSim,1));
+            
+            % Summary result
+            S.logvarV(indx,:) = kron(ones(D.numSubj,1),theta(1:Model.numPrior));
+            S.logtau(indx,:)  = kron(ones(D.numSubj,1),theta(Model.numPrior+1:end));
+            
+            % post-process of omega to adjust by mean of regressor
+            X = sh1_getRDMmodelTau1(theta(Model.numPrior+1:end),Model.constantParams{:});
+            meanX = mean(X.RDM,2);            
+            S.omega_hat(indx,:) = bsxfun(@times,omega,meanX')/D.numVox;
+        end;
+        
+        % Plot result: omegas
+        figure;
+        subplot(2,2,1);
+        xpos = myboxplot([],S.logEvidenceSplit(:,1+Model.numComp:end));
+        title('log-evidence split');
+        set(gca,'XTick',xpos,'XTicklabel',Model.name_orig);
+        rotateXLabels(gca,45);
+        
+        subplot(2,2,2);
+        xpos = myboxplot([],S.omega_hat); hold on
+        xrange = xpos(2)-xpos(1);
+        drawline(0,'dir','horz');
+        for reg=1:length(reducedModelTerms)
+            drawline(S.omega_true(1,ismember(modelTerms,reducedModelTerms(reg))),...
+                'dir','horz','linewidth',2,'lim',...
+                [xpos(reg) xpos(reg)]+[-0.5 0.5]*xrange,'color',[1 0 0])
+        end
+        title('true and estimated \omega');
+        set(gca,'XTick',xpos,'XTicklabel',Model.name_orig);
+        rotateXLabels(gca,45);
+        
+        % Prior parameters
+        T = tapply(S,{'exp'},{S.omega_hat,'nanmean','name','omega_hat'},...
+            {S.logvarV,'nanmean','name','logvarV'},...
+            {S.logtau,'nanmean','name','logtau'},...
+            {S.omega_true,'nanmean','name','omega_true'});
+        
+        subplot(2,2,3);
+        barplot([],T.logvarV);
+        title('Group-wise hyper parameters log prior var','fontsize',12);
+        
+        % Nonlinear parameters
+        subplot(2,2,4)
+        barplot([],T.logtau);
+        title('Group-wise hyper parameters log tau','fontsize',12);
+        
+        varargout={S,T};        
 end;
 
 
