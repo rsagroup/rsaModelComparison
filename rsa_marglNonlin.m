@@ -64,6 +64,9 @@ for s=1:numSubj
         XX(:,:,i)=X(:,i,s)*X(:,i,s)'; 
     end; 
 
+    % Precompute V0*X(:,:,s)'
+    V0XT = V0*X(:,:,s)'; % = X(:,:,s)*V0. 
+    
     S = Sigma(:,:,s) + X(:,:,s)*V0*X(:,:,s)' ;                              % Compute training set covariance matrix
     L = chol(S)';                                                           % Cholesky factorization of the covariance
     alpha = solve_chol(L',Y(:,s));                                          % Convenience function (=S^-1*Y)
@@ -83,9 +86,11 @@ for s=1:numSubj
         end; 
         % Derivative of negative log-likelihood wrt nonlinear parameters
         for i=1:Model.numNonlin
-           dSdTheta = dX(:,:,i,s)*V0*X(:,:,s)' + X(:,:,s)*V0*dX(:,:,i,s)';           
-           dnlml(Model.numPrior+i,s) = -1/2*sum(sum(W.*dSdTheta));
-        end 
+            tmp = dX(:,:,i,s)*V0XT;
+            dSdTheta = tmp+tmp'; % because dX*V0XT = (XV0*dX')'
+%             dSdTheta = dX(:,:,i,s)*V0*X(:,:,s)' + X(:,:,s)*V0*dX(:,:,i,s)';
+            dnlml(Model.numPrior+i,s) = -1/2*sum(sum(W.*dSdTheta));
+        end
     end;
     
     % Regression coefficients
