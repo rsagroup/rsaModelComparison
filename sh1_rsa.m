@@ -257,8 +257,12 @@ switch(what)
                             
                             % we must choose only the distance between physically identical sequences here
                             tmprdm      = getCommon(rdm,[3 5 7]);
-                            tmprdm_     = getCommon(rdm_all_,[3 5 7]);
+                            tmprdm_     = getCommon(rdm_all_,[3 5 7]);                            
                             R.across    = corr(tmprdm',tmprdm_','type','Pearson'); % across chunk set corr
+                            
+                            tmprdm      = getCommon(rdm,[3 5 7]);
+                            tmprdm_     = getCommon(rdm_loo,[3 5 7]);
+                            R.within_l_reduced  = corr(tmprdm',tmprdm_','type','Pearson'); % lower bound (calculated with reduced RDM)
                             
                             R.subj      = subj(s);
                             R.chunkset  = chunkset;
@@ -275,16 +279,8 @@ switch(what)
         
         for glm=[1 3]
         figure('name',sprintf('reliability (glm=%d)',glm));
-        for reg=1:8;
-            subplot(2,4,reg);
-            %xpos = myboxplot(C.hemis,[C.within_u,C.within_l,C.across],'subset',C.region==reg);
-            xpos = barplot([C.hemis],[C.within_u,C.within_l,C.across],'subset',C.region==reg&C.glm==glm);
-            drawline(0,'dir','horz');
-            title(regname{reg},'fontsize',12);
-            ylabel('Pearson r','fontsize',12)
-            %set(gca,'XTick',[xpos(1:4)],'XTicklabel',omega_names,'fontsize',12);
-            %rotateXLabels(gca,45);
-        end
+            D = getrow(C,C.glm==glm);
+            sh1_rsa('plot_reliability_btw',D);
         end
         
         varargout = {C};
@@ -390,9 +386,12 @@ switch(what)
         glm = 3;
         useolddata = 0;
         modelTerms = [1 2 4 6];
-       
-        vararginoptions(varargin(:),{'glm','useolddata','modelTerms'})
+        Niter       = 100; % iteration from different initial parameter values
+        Ntake       = 100; % how many best models you choose
+        region      = [1 2];
+        vararginoptions(varargin(:),{'glm','useolddata','modelTerms','Niter','Ntake','region'})
         
+        TT=[];
         % load data set
         if useolddata
             %T       = load(fullfile(regDir,'distances_glm1.mat'));
@@ -405,16 +404,16 @@ switch(what)
                         
         % pool all ROI data to estimate single tau parameter for whole brain        
         mRDM = [];
-        indx = true(size(T.subj));%find(T.region==1&T.hemis==1);
+        indx = find(ismember(T.region,region)&T.hemis==1);%true(size(T.subj));%find(T.region==1&T.hemis==1);
         D=getrow(T,indx);
         for s=1:length(D.subj)
             Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8);
         end;
         
-        for iter = 1:5
+        for iter = 1:Niter
             iter
-            initialguess = rand(size(modelTerms))*100-50;
-            initialguess(end) = 0;
+            initialguess = rand(size(modelTerms))*3-1.5;
+            initialguess(end) = 0
             
             % organize model RDMs
             Model.fcn = @sh1_getRDMmodelTau1;
@@ -432,43 +431,65 @@ switch(what)
             
             mevid = mean(levid,1);
         end
-        maxidx = find(mevid==max(mevid),1,'first');
-        % choose one
-        logtheta(indx,:)    = repmat(lt(maxidx,:),length(indx),1);
-        w                   = squeeze(w(:,:,maxidx));
-        logEvidence(indx,:) = levid(:,maxidx);
+        [~,indices]= sort(mevid,2,'descend');
+        maxindices = indices(1:Ntake);%find(mevid==max(mevid),Ntake,'first');
         
-        % normalize omega with mean of each RDM
-        M = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-            Model.constantParams{:});
-        norm = permute(mean(M.RDM.^2,2),[3 1 2]);        
-        omega(indx,:)   = w;
-        omegaN(indx,:)  = w.*norm;
+        for m=1:length(maxindices)
+            
+            maxidx=maxindices(m);
+            % choose
+            logtheta(:,:)    = repmat(lt(maxidx,:),length(indx),1);
+            ww                  = squeeze(w(:,:,maxidx));
+            logEvidence(:,:) = levid(:,maxidx);
+            
+            % normalize omega with mean of each RDM
+            M = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
+                Model.constantParams{:});
+            normX = sqrt(mean(M.RDM.^2,2));
+            omega(:,:)   = ww;
+            omegaN(:,:)  = bsxfun(@times,ww,normX');
+            
+            % save resultant RDMs with estimated tau
+            %         A = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
+            %             1,Model.constantParams{2:end}); % chunk set A
+            %         B = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
+            %             2,Model.constantParams{2:end}); % chunk set B
+            %         mrdm.RDM    = [A.RDM;B.RDM];
+            %         mrdm.set    = kron([1 2]',ones(Model.numComp,1));
+            %         mrdm.comp   = repmat(Model.constantParams{2}',2,1);
+            %         mrdm.name   = {A.name{:};B.name{:}};
+            %         mrdm.region = repmat(r,size(mrdm.set));
+            %         mrdm.hemis  = repmat(h,size(mrdm.set));
+            %         mRDM        = addstruct(mRDM,mrdm);
+            %         %
+            
+            D.maxidx        = repmat(m,length(indx),1);
+            D.omega         = omega;
+            D.omegaN        = omegaN;
+            D.logtheta      = logtheta;
+            D.logEvidence   = logEvidence;            
+            %D.logEvidenceSplit = logEvidenceSplit;
+            
+            TT = addstruct(TT,D);
+            
+            %sh1_rsa('plot_omega_prior',D);
+            %sh1_rsa('plot_prior',D);
+            %sh1_rsa('plot_tau',D);            
+        end
+        figure;
+        subplot(3,2,[1 2])
+        lineplot(TT.maxidx,TT.logEvidence,'style_shade');ylabel('logEvidence')
         
-        % save resultant RDMs with estimated tau
-%         A = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-%             1,Model.constantParams{2:end}); % chunk set A
-%         B = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-%             2,Model.constantParams{2:end}); % chunk set B
-%         mrdm.RDM    = [A.RDM;B.RDM];
-%         mrdm.set    = kron([1 2]',ones(Model.numComp,1));
-%         mrdm.comp   = repmat(Model.constantParams{2}',2,1);
-%         mrdm.name   = {A.name{:};B.name{:}};
-%         mrdm.region = repmat(r,size(mrdm.set));
-%         mrdm.hemis  = repmat(h,size(mrdm.set));
-%         mRDM        = addstruct(mRDM,mrdm);
-%         %
+        subplot(3,2,[3 4]);
+        barplot(TT.maxidx,TT.logtheta(:,5:end),...
+            'subset',ismember(TT.maxidx,[1:10:100]));ylabel('logTau')
         
-        T.omega         = omega; 
-        T.omegaN        = omegaN; 
-        T.logtheta      = logtheta; 
-        T.logEvidence   = logEvidence;
-        %T.logEvidenceSplit = logEvidenceSplit;
+        subplot(3,2,[5 6]);
+        barplot(TT.maxidx,TT.omegaN,...
+            'subset',ismember(TT.maxidx,[1:10:100]));ylabel('Omega')
         
-        sh1_rsa('plot_omega_prior',T);
-        sh1_rsa('plot_prior',T);
-        sh1_rsa('plot_tau',T);
-        varargout={T,mRDM}; 
+        
+        varargout={TT,mRDM}; 
     case 'fit_model_EB_nonlin_singlemodel' % fit single model to compare log-evidence 
         glm = 1;
         useolddata = 0;
@@ -537,9 +558,10 @@ switch(what)
         sh1_rsa('plot_tau',T);
         varargout={T};
     case 'fit_model_EB_nonlin_multiguess' 
-        glm = 1;
-        useolddata = 1;
-        modelTerms = [1 2 4 6];
+        glm         = 1;
+        useolddata  = 1;
+        modelTerms  = [1 2 4 6];
+        Niter       = 100;
         vararginoptions(varargin(:),{'glm','useolddata','modelTerms'})
         
         % load data set
@@ -553,7 +575,7 @@ switch(what)
         end
                         
         %regions=unique(T.region);
-        regions=[1:8]';
+        regions=[1:2]';
         mRDM = [];
         for r=regions' 
             for h=[1 2] 
@@ -563,7 +585,7 @@ switch(what)
                     Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8); 
                 end; 
                 
-                for iter = 1:50
+                for iter = 1:Niter
                     iter
                     initialguess = rand(size(modelTerms))*100-50;
                     initialguess(end) = 0;
@@ -593,7 +615,9 @@ switch(what)
                 % normalize omega with mean of each RDM
                 M = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
                           Model.constantParams{:});
-                omega(indx,:) = w.*permute(mean(M.RDM,2),[3 1 2]);  
+                normX = sqrt(mean(M.RDM.^2,2));
+                omega(indx,:) = w;
+                omegaN(indx,:) = bsxfun(@times,w,normX');
                 
                 % save resultant RDMs with estimated tau                
                 A = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
@@ -694,6 +718,47 @@ switch(what)
             imagesc_rectangle([mean(Ldata.logtheta(:,1:4),1),mean(Rdata.logtheta(:,1:4),1)],...
                 'scale',[-scale, scale]);
         end
+    case 'plot_reliability_btw' % plot between subject reliabitliy of RDM
+        C = varargin{1};
+        region = [1:8];
+        barwidth = 0.8;
+        
+        Nregion = numel(region);
+        figure('name',sprintf('Between subject reliability of RDM'),'color','w');        
+        for reg = region;
+            count=0;
+            for h=[2 1]
+                % right hemi
+                subplot(2,Nregion,reg+count*Nregion);
+                subset = C.region==reg&C.hemis==h;
+                upperbound  = nanmean(C.within_u(subset,:));
+                se          = nanmean(C.within_u(subset,:))/sqrt(nancount(C.within_u(subset,:)));
+                
+                xpos = barplot([],[C.within_l,C.across,C.within_l_reduced],'subset',subset,'barwidth',barwidth);
+                [tval, p]=ttest_mc(C.within_l,C.across,1,'paired','subset',subset)
+                
+                drawline(0,'dir','horz','lim',[xpos(1)-barwidth,xpos(2)+barwidth]); hold on
+                drawline(upperbound,'dir','horz','color',[0.5 0.5 0.5],'lim',...
+                    [xpos(1)-barwidth,xpos(2)+barwidth],...
+                    'linewidth',2,'error',se,'errorcolor',[0.8 0.8 0.8])
+                xpos = barplot([],[C.within_l,C.across,C.within_l_reduced],'subset',subset,'barwidth',barwidth); hold on
+                
+                title([regname{reg},'-',hemName{h}],'fontsize',12);
+                ylabel('Pearson r','fontsize',12);xlabel('');
+                set(gca,'ylim',[-0.2 0.8],'xticklabel',{'W','B'},'fontsize',12)
+                if p<0.05
+                    drawline(0.78,'dir','horz','lim',xpos([1,2]),'color',[1 0 0]);
+                elseif p<0.01
+                    drawline(0.78,'dir','horz','lim',xpos([1,2]),'color',[0 1 0]);
+                elseif p<0.001
+                    drawline(0.78,'dir','horz','lim',xpos([1,2]),'color',[0 0 1]);
+                end
+                count=count+1;
+            end
+        end
+        
+        
+        
         
     case 'showRDMs'
         T=varargin{1};
