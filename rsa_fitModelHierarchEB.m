@@ -22,6 +22,8 @@ function [omega,logEvidence,theta,logEvidenceSplit]=rsa_fitModelHierarchEB(Model
 %  Sigma   : numCond x numCond x numSubj : Estimated variance matrix of
 %  numPart : Number of partitions 
 %  numVox  : numSubj x 1 Effective number of voxels  
+% OPTIONAL 
+%  'minimizeLength': Length of line search parameter (see help minimize)
 % OUTPUT:
 %   omega:       estimates of the regression coefficients, 1 row per subject 
 %   logEvidence: Marginal likelihood of the model 
@@ -31,6 +33,7 @@ import rsa.*;
 
 % Options: Not used right now 
 Opt = []; 
+Opt.minimizeLength = 10; 
 Opt=rsa.getUserOptions(varargin,Opt);
 
 
@@ -57,11 +60,11 @@ if (isfield(Model,'X'))
     %     Model.ridgeparam=[1:numReg]; 
     % end; 
     theta0 = zeros(numReg,1);                                               % variance parameters: number of regressors    
-    theta  = minimize(theta0,@rsa_marglRidgeIndividEB,4,X,Y,SigmaDist);     % Minmize the ridge parameter for the group 
+    theta  = minimize(theta0,@rsa_marglRidgeIndividEB,Opt.minimizeLength,X,Y,SigmaDist);     % Minmize the ridge parameter for the group 
     [~,~,omega,~,nlml]=rsa_marglRidgeIndividEB(theta, X, Y, SigmaDist);     % Estimate the regression coefficients seperately 
 else
     theta0              = [zeros(Model.numPrior,1);Model.nonlinP0'];                % Add the variance parameters
-    [theta, nlmls]      = minimize(theta0,@rsa_marglNonlin,[1000 100],Model,Y,SigmaDist);    % Minmize the ridge parameter for the group 
+    [theta, nlmls]      = minimize(theta0,@rsa_marglNonlin,Opt.minimizeLength,Model,Y,SigmaDist);    % Minmize the ridge parameter for the group 
     [~,~,omega,~,nlml]  = rsa_marglNonlin(theta, Model, Y, SigmaDist);              % Estimate the regression coefficients seperately 
     %keyboard; 
 end;     
@@ -74,7 +77,7 @@ theta    = theta';
 if nargout>3 
     X=permute(Model.RDM,[2 1 3]); 
     V0 = diag(exp(theta(1:Model.numPrior))); 
-    [mL1,mL2]=rsa.stat.marglRidgeSplit(V0, X, Y, SigmaDist);                % Estimate the regression coefficients seperately 
+    [mL1,mL2]=rsa_marglRidgeSplit(V0, X, Y, SigmaDist);                % Estimate the regression coefficients seperately 
     logEvidenceSplit=[mL1 mL2];    
 end; 
         

@@ -437,6 +437,21 @@ switch(what)
                 %saveas(h,fullfile(figDir,figName),'fig');
             end
         end
+    case 'avrgRDMs'  % Computes average RDM and within-chunkset reliabilities 
+        D=varargin{1};
+        T=[]; 
+        for reg=1:8
+            for h=1:2
+                indx = D.region==reg & D.hemis==h; 
+                S.name = {sprintf('%s.%s)',regname{reg},hemName{h})};
+                S.RDM  = mean(D.RDM(indx,:));
+                C      = triu(corr(D.RDM(indx,:)')); % All inter-subject correlations 
+                S.avrgCorr = mean(C(C~=0)); 
+                T=addstruct(T,S); 
+            end
+        end
+        rsa.fig.imageRDMs(T); 
+        varargout={T}; 
     otherwise
         disp('there is no such case.')
 end;

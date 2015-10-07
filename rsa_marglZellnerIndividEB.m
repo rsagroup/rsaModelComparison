@@ -1,13 +1,16 @@
-function [nlmlSum,dnlmlSum,wN,VN,nlml] = rsa_marglRidgeEB(logtheta, X, Y, Sigma);
-% function [nlmlSum,dnlmlSum,wN,VN,nlml] = rsa_marglRidgeEB(logtheta, X, Y, Sigma);
-% Marginal likelihood of the Baysean multiple regression model with known
+function [nlmlSum,dnlmlSum,wN,VN,nlml] = rsa_marglZellnerIndividEB(logtheta, X, Y, Sigma);
+% function [nlmlSum,dnlmlSum,wN,VN,nlml] = rsa_marglZellnerIndividEB(logtheta, X, Y, Sigma);
+% Marginal likelihood of the multiple regression model with known
 % multivariate noise covariance (Sigma) 
-% Integrates over different subjects (observations) which may have
+% Inetgrates over different subejcts (observations) which may have
 % different design matrices and different Sigma's 
 % 
 % y_n = X_n*beta_n + noise_n; 
 % 
-% The prior variance of the regression coefficients is V0 = eye(Q) * exp(logtheta)
+% The prior variance of the regression coefficients is using a modified
+% Zellner g-prior, where the weight of each regressor is independently
+% weighted 
+% V0 = diag(exp(logtheta))
 % 
 % INPUT: 
 %   logtheta : log prior variance on the betas 
@@ -21,20 +24,26 @@ function [nlmlSum,dnlmlSum,wN,VN,nlml] = rsa_marglRidgeEB(logtheta, X, Y, Sigma)
 %   wN       : the posterior mean of the regression coefficients
 %   VN       : the posterior Variance of the regression coefficients
 %   nlml     : negative log likelihood for each Subject (for model comp) 
-% Joern Diedrichsen%
 % Joern Diedrichsen
 
 [N, numReg,depthX] = size(X);
-[N, numSubj] = size(Y);
+[N, numSubj]       = size(Y);
+
+% Deal with possible different design matrices for different subjects 
 if (depthX ==1) 
     X=repmat(X,1,1,numSubj); 
 elseif (depthX~=numSubj)
     error('X must needs to be a matrix or have a size in the 3rd dimension of numSubj'); 
 end;
 
-V0 = eye(numReg)*exp(logtheta);              % Prior covariance of the regression coefficients
 
 for s=1:numSubj
+    
+    % Precompute V0 and for the 
+    XX   = X(:,:,s)'*X(:,:,s); 
+    W    = diag(exp(logtheta));
+    XXiW = XX\W; 
+    V0   = W*XXiW;    % Prior covariance of the regression coefficients
     S = Sigma(:,:,s) + X(:,:,s)*V0*X(:,:,s)' ;       % compute training set covariance matrix
     L = chol(S)';               % cholesky factorization of the covariance
     alpha = solve_chol(L',Y(:,s));   % Convenience function
@@ -42,8 +51,14 @@ for s=1:numSubj
     nlml(s)  = 0.5*sum(sum(alpha.*Y(:,s),2)) + sum(log(diag(L))) + 0.5*N*log(2*pi);  % Negative log-likihood
     if (nargout>1)
         invS     = (L'\(L\eye(N)));
-        W        = alpha*alpha'-invS;           % this is (alpha*alpha' - inv(S))
-        dnlml(s) = -1/2*sum(sum(W.*(X(:,:,s)*V0*X(:,:,s)')));            % Derivative of L
+        K        = alpha*alpha'-invS;           % this is (alpha*alpha' - inv(S))
+        for i=1:numReg
+            A = zeros(numReg); 
+            A(i,:) = XXiW(i,:); 
+            A(:,i) = A(:,i)+XXiW(i,:)'; 
+            dSdth = X(:,:,s)*A*X(:,:,s)';
+            dnlml(i,s) = -1/2*sum(sum(K.*dSdth))*W(i,i);              
+        end; 
     end;
     if (nargout>2)
         wN(:,s)  = V0*X(:,:,s)'*alpha;                            % regression coefficients by Matrix inversion
@@ -56,5 +71,5 @@ end;
 % Sum marginal likelihoods for optimization 
 nlmlSum  = sum(nlml); 
 if (nargout>1)
-    dnlmlSum = sum(dnlml);
+    dnlmlSum = sum(dnlml,2); 
 end; 

@@ -1,10 +1,26 @@
 function [nlmlSum,dnlmlSum,wN,VN,nlml] = rsa_marglRidgeIndividEB(logtheta, X, Y, Sigma);
-%   nlml     is the returned value of the negative log marginal likelihood
-%   dnlml    is a (column) vector of partial derivatives of the negative
+% function [nlmlSum,dnlmlSum,wN,VN,nlml] = rsa_marglRidgeIndividEB(logtheta, X, Y, Sigma);
+% Marginal likelihood of the multiple regression model with known
+% multivariate noise covariance (Sigma) 
+% Inetgrates over different subejcts (observations) which may have
+% different design matrices and different Sigma's 
+% 
+% y_n = X_n*beta_n + noise_n; 
+% 
+% The prior variance of the regression coefficients is V0 = diag(exp(logtheta))
+% 
+% INPUT: 
+%   logtheta : log prior variance on the betas 
+%   X        : Design matrix (N x Q (x numSubj)  
+%   Y        : Data matrix (N x numSubj) 
+%   Sigma    : NxN noise Matrix (x numSubj) 
+% OUTPUT 
+%   nlmlSum  : the negative log marginal likelihood (summed over subjects)              
+%   dnlmlSum :  a (column) vector of partial derivatives of the negative
 %                 log marginal likelihood wrt each log hyperparameter
-%   wN       is the posterior Model of the regression coefficients
-%   VN       is the posterior Variance of the regression coefficients
-%
+%   wN       : the posterior mean of the regression coefficients
+%   VN       : the posterior Variance of the regression coefficients
+%   nlml     : negative log likelihood for each Subject (for model comp) 
 % Joern Diedrichsen
 
 [N, numReg,depthX] = size(X);
@@ -37,7 +53,8 @@ for s=1:numSubj
         invS     = (L'\(L\eye(N)));
         W        = alpha*alpha'-invS;           % this is (alpha*alpha' - inv(S))
         for i=1:numReg
-            dnlml(i,s) = -1/2*sum(sum(W.*s));            % Derivative of L
+            thetai = exp(logtheta(i));
+            dnlml(i,s) = -1/2*sum(sum(W.*(XX(:,:,i))))*thetai;              
         end; 
     end;
     if (nargout>2)

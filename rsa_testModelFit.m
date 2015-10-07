@@ -1,7 +1,5 @@
 function varargout=rsa_testModelFit(what,varargin)
-% Testing for contstructng and Fitting component models
-%
-%
+% Testing for Constructing and fitting component models
 % Define optional parameter
 Opt.rootPath='/Users/joern/Desktop/rsaworkshop/rsatoolbox.v.2a/Demos/Demo_component';
 Opt.rootPath='/Users/joern/Talks/2015/02_Demo_component';
@@ -264,16 +262,18 @@ switch (what)
     case 'test_bayesRegress'            % Test the Bayesian regression model comparisons
         % Determines the regularisation and sigma from a group of
         % numParticipants measures
-        M1 = rsa_testModelFit('chordingModel');
-        M2 = M1(1:3);   % lacking the third term
+        % This compares a number of different Ways of applying the prior 
+        %  - Single Ridge 
+        %  - Individual Ridge 
+        %  - Single Zellner 
+        %  - Individual Zellner 
+        M1 = sh1_getRDMmodelTau1([-1 0 0 0],1,[1 2 4 6],'sqEuclidean');
         D.numExp  =   10;           % 100 Experiments
         D.numSubj = 10;     % 12 Partitipants
         D.numSim  = D.numExp * D.numSubj;
-        D.omega   = zeros(1,length(M1));
-        % D.omega = [0 0 0 0.01];
-        D.omega(1)= 0.03;
-        D.omega(10)= 0.03;
-        D.var_e   = 80;
+        % D.omega   = zeros(1,size(M1.RDM,1));
+        D.omega = [2 0 0 0]; 
+        D.var_e   = 0.5;
         D.numPart = 8;
         
         % figure(1);
@@ -285,25 +285,29 @@ switch (what)
             indx = find(S.exp==i);
             % Null Model: assuming all distances are zero
             S.logE0(indx,1)=...
-                rsa.stat.fitModelNull(S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
-            % GLS fitting: Assuming the noise covariance based on all distances zero
-            S.omegaGLS(indx,:) =...
-                rsa.stat.fitModelGLS(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelNull(S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
             % IRLS fitting: Taking into account the noise covariance under
             % the current model fit
             S.omegaIRLS(indx,:) =...
-                rsa.stat.fitModelIRLS(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelIRLS(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
             % Using overall ridge estimated by empirical Bayes
             [S.omega1(indx,:),S.logE1(indx,1),S.logtheta1(indx,1)]=...
-                rsa.stat.fitModelRidgeEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
-            % Using overall ridge and empirical Bayes: Model 2 for
-            % comparision
-            [S.omega2(indx,:),S.logE2(indx,1),S.logtheta2(indx,1)]=...
-                rsa.stat.fitModelRidgeEB(M2,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelRidgeEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
             % Using Individual ridge paramtersestimated by empirical Bayes
-            [S.omegaIn(indx,:),S.logEIn(indx,1),lT,S.logEInSplit(indx,:)]=...
-                rsa.stat.fitModelRidgeIndividEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
-            S.logthetaIn(indx,:)=repmat(lT,length(indx),1);
+            [S.omega2(indx,:),S.logE2(indx,1),lT]=...
+                rsa_fitModelRidgeIndividEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+            S.logtheta2(indx,:)=repmat(lT,length(indx),1);
+            % Using overall Zellner g-prior 
+            [S.omega3(indx,:),S.logE3(indx,1),S.logtheta3(indx,1)]=...
+                rsa_fitModelZellnerEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+            % Using individual Zellner g-prior
+            [S.omega4(indx,:),S.logE4(indx,1),lT]=...
+                rsa_fitModelZellnerIndividEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+            S.logtheta4(indx,:)=repmat(lT,length(indx),1);
+
+            
+            
+            
             % Ceiling model
             res=bsxfun(@minus,S.RDM(indx,:),mean(S.RDM(indx,:)));
             S.logEC(indx,1)=...
@@ -333,14 +337,14 @@ switch (what)
         % Experimental parameters
         D.numExp    = 1;     % 100 Experiments
         D.numSubj   = 14;     % 12 Partitipants
-        D.numSim    = D.numExp * D.numSubj;        
         D.var_e     = 50;
         D.numPart   = 8;        
-        % generate true omega for individual participant: constant 
+        D           = getUserOptions({varargin{5:end}},D);
+        D.numSim    = D.numExp * D.numSubj;        
         D.omega     = repmat(w0,D.numSim,1); 
+        % generate true omega for individual participant: constant 
         % mvnrnd(w0,diag(v),D.numSim);
         % D.omega     = ssqrt(D.omega.*D.omega);
-        D           = getUserOptions({varargin{5:end}},D);
         
         % Define model structure (using one-digit, two-digit, chunk, and
         % sequence models)
@@ -351,8 +355,8 @@ switch (what)
         for m=1:numel(Model.name)
             Model.name{m} = sprintf('%s (logtau=%2.0d)',Model.name{m},logtau(m));
         end
-        figure(1);
-        rsa.fig.imageRDMs(Model);        
+        % figure(1);
+        % rsa.fig.imageRDMs(Model);        
         Model.constantParams    = constantParams;
         Model.numComp           = numel(modelTerms);
         Model.numPrior          = numel(v);
@@ -367,9 +371,9 @@ switch (what)
         S.subj  = kron(ones(D.numExp,1),[1:D.numSubj]');
         
         % adjust true value based on mean of X
-        meanX_true      = mean(Model.RDM,2);
-        S.omega_true    = bsxfun(@times,D.omega,meanX_true');
-        
+        S.omega_true  = D.omega;             
+        normX = sqrt(mean(Model.RDM.^2,2));  
+        S.omega_trueNorm  = bsxfun(@times,S.omega_true,normX');
         varargout = {S,D,Sigma,Model};                
     case 'test_HierarchEB_checkgrad'            % check if derivatives of logmerginallikelihood are correct
         ptb = varargin{1};
@@ -411,7 +415,7 @@ switch (what)
         % Estimate both group hyper parameters using all data and then
         %   estimate omega
         
-        % Redifine model for fit
+        % Redefine model for fit
         constantParams          = Model.constantParams;
         reducedModelTerms       = [1 2 4 6]; 
         constantParams{2}       = reducedModelTerms;
@@ -421,13 +425,11 @@ switch (what)
         Model.numPrior          = numel(reducedModelTerms);
         Model.numNonlin         = numel(reducedModelTerms);
         Model.nonlinP0          = zeros(1,Model.numNonlin);
-        Model.constantParams    = constantParams;
         Model.fcn               = @sh1_getRDMmodelTau1; 
-        Model.name_orig         = Model.name;
         
         for i=1:D.numExp
             indx = find(S.exp==i);
-            [omega,logEvidence,theta,S.logEvidenceSplit(indx,:)] = ...
+            [S.omega_hat(indx,:),S.logEvidence(indx,:),theta,S.logEvidenceSplit(indx,:)] = ...
                 rsa_fitModelHierarchEB(Model,S.RDM(indx,:),Sigma(:,:,indx),D.numPart,repmat(D.numVox,D.numSim,1));
             
             % Summary result
@@ -436,8 +438,8 @@ switch (what)
             
             % post-process of omega to adjust by mean of regressor
             X = sh1_getRDMmodelTau1(theta(Model.numPrior+1:end),Model.constantParams{:});
-            meanX = mean(X.RDM,2);            
-            S.omega_hat(indx,:) = bsxfun(@times,omega,meanX')/D.numVox;
+            normX = sqrt(mean(X.RDM.^2,2));  
+            S.omega_hatn(indx,:) = bsxfun(@times,S.omega_hat(indx,:),normX');
         end;
         
         % Plot result: omegas
@@ -449,7 +451,7 @@ switch (what)
         rotateXLabels(gca,45);
         
         subplot(2,2,2);
-        xpos = myboxplot([],S.omega_hat); hold on
+        xpos = myboxplot([],S.omega_hatn); hold on
         xrange = xpos(2)-xpos(1);
         drawline(0,'dir','horz');
         for reg=1:length(reducedModelTerms)
@@ -476,7 +478,77 @@ switch (what)
         barplot([],T.logtau);
         title('Group-wise hyper parameters log tau','fontsize',12);
         
-        varargout={S,T};        
+        varargout={S,T};                
+    case 'test_multiple_minima'  % test how to get around the problem of multiple local minima in the nonlinear fit 
+        % Simulation 1: Possible confusion between single finger and chunk?
+        scenario = varargin{1}; 
+        switch (scenario) 
+            case 1 
+                v           = [0 0 0 0];                % variance of true omegas
+                modelTerms  = [1 2 4 6];
+                logtau      = [-2 0 2 0];         % temporal decay of features 
+                w0          = [1 0 0 0];                % mean of true omegas;        
+                nonlinP0    = [-2 0 2 0;...             % Start from true values (1)
+                               2 0 -2 0];               % reverse roles          (2)
+            case 2 
+                v           = [0 0 0 0];                % variance of true omegas
+                modelTerms  = [1 2 4 6];
+                logtau      = [0 -2 2 0];         % temporal decay of features 
+                w0          = [0 3 3 0];                % mean of true omegas;        
+                nonlinP0    = [0 -2 2 0;...             % Start from true values 
+                               0 2 -2 0];               % reverse roles 
+        end; 
+                   
+        % Synthesise data with given hyper parameters
+        D.numExp =10; 
+        D.numSubj=10; 
+        T=[]; 
+        [S,D,Sigma,Model] = rsa_testModelFit('yokoiModel_synth',modelTerms,exp(logtau),v,w0,D);
+                       
+        % Redefine model for fit
+        reducedModelTerms       = [1 2 4 6]; 
+        constantParams{2}       = reducedModelTerms;
+        Model.numComp           = numel(reducedModelTerms);
+        Model.numPrior          = numel(reducedModelTerms);
+        Model.numNonlin         = numel(reducedModelTerms);
+        Model.fcn               = @sh1_getRDMmodelTau1; 
+
+        for k=1:size(nonlinP0,1) 
+            Model.nonlinP0          = nonlinP0(k,:);
+            for i=1:D.numExp
+                indx = find(S.exp==i);
+
+                [S.omega_hat(indx,:),S.logEvidence(indx,:),theta] = ...
+                    rsa_fitModelHierarchEB(Model,S.RDM(indx,:),Sigma(:,:,indx),...
+                    D.numPart,repmat(D.numVox,D.numSim,1),'minimizeLength',1000);
+            
+                % Fitted group parameters 
+                S.logvarV(indx,:) = kron(ones(D.numSubj,1),theta(1:Model.numPrior));
+                S.logtau(indx,:)  = kron(ones(D.numSubj,1),theta(Model.numPrior+1:end));
+            
+                % post-process of omega to adjust by norm of regressor
+                X = sh1_getRDMmodelTau1(theta(Model.numPrior+1:end),Model.constantParams{:});
+                normX = sqrt(mean(X.RDM.^2,2));  
+                S.omega_hatNorm(indx,:) = bsxfun(@times,S.omega_hat(indx,:),normX');
+            end;
+            S.startingVal = ones(size(S.logEvidence))*k; 
+            T=addstruct(T,S); 
+        end; 
+        subplot(2,2,1); 
+        myboxplot(T.startingVal,T.omega_hatNorm); 
+        title('omega estimates'); 
+        xlabel('starting Val'); 
+        drawline(0,'dir','horz'); 
+        
+        for i=1:3 
+            subplot(2,2,1+i); 
+            scatterplot(T.logtau(T.startingVal==1,i),T.logtau(T.startingVal==2,i),'identity'); 
+            title(sprintf('logtau (%d) estimates',i)); 
+            xlabel('startingval 1'); 
+            ylabel('startingval 2'); 
+        end; 
+        
+        varargout={T};        
 end;
 
 
