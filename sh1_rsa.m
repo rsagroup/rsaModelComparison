@@ -386,9 +386,9 @@ switch(what)
         glm = 3;
         useolddata = 0;
         modelTerms = [1 2 4 6];
-        Niter       = 100; % iteration from different initial parameter values
-        Ntake       = 100; % how many best models you choose
-        region      = [1 2];
+        Niter       = 50; % iteration from different initial parameter values
+        Ntake       = 50; % how many best models you choose
+        region      = [3 4];
         vararginoptions(varargin(:),{'glm','useolddata','modelTerms','Niter','Ntake','region'})
         
         TT=[];
@@ -447,7 +447,7 @@ switch(what)
                 Model.constantParams{:});
             normX = sqrt(mean(M.RDM.^2,2));
             omega(:,:)   = ww;
-            omegaN(:,:)  = bsxfun(@times,ww,normX');
+            omegaN(:,:)  = ww.*permute(normX,[3 1 2]);%bsxfun(@times,ww,normX');
             
             % save resultant RDMs with estimated tau
             %         A = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
@@ -491,10 +491,10 @@ switch(what)
         
         varargout={TT,mRDM}; 
     case 'fit_model_EB_nonlin_singlemodel' % fit single model to compare log-evidence 
-        glm = 1;
+        glm = 3;
         useolddata = 0;
         modelTerms = [1 2 4 6];
-        nonlinP0 = [-10 1 10 0];
+        nonlinP0 = [0 0 0 0];
         vararginoptions(varargin(:),{'glm','useolddata','modelTerms','nonlinP0'})
         
         % load data set
@@ -508,7 +508,7 @@ switch(what)
         end
                 
         %regions=unique(T.region);
-        regions=[1:8]';
+        regions=[2 3 4 5 7]';
         for r=regions'
             fprintf('Estimating ROI distance %s...\n',regname{r});
             for h=[1 2]
@@ -535,12 +535,12 @@ switch(what)
                     
                     logprior(indx,m)  = repmat(lt(1),length(indx),1);
                     logtau(indx,m)    = repmat(lt(2),length(indx),1);
-                    term(indx,m)      = repmat(modelTerms(m),length(indx),1);;
+                    term(indx,m)      = repmat(modelTerms(m),length(indx),1);
                     
                     % normalize omega with mean of each RDM
                     M = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
                         Model.constantParams{:});
-                    omega(indx,m) = w.*permute(mean(M.RDM,2),[3 1 2]);
+                    omega(indx,m) = w.*permute(sqrt(mean(M.RDM.^2,2)),[3 1 2]);
                     
                 end % model term
             end;
@@ -726,6 +726,7 @@ switch(what)
         Nregion = numel(region);
         figure('name',sprintf('Between subject reliability of RDM'),'color','w');        
         for reg = region;
+            fprintf('%s',regname{reg})
             count=0;
             for h=[2 1]
                 % right hemi
