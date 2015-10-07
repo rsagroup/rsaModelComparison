@@ -7,13 +7,14 @@ function [omega,logEvidence,theta,logEvidenceSplit]=rsa_fitModelHierarchEB(Model
 %   a) For linear (reweighting) model 
 %    Model.X :  numReg  x numDist (x numSubj): Design matrix, 
 %             if different across subject, 3-d structure with one slice per subject
+%    Model.prior: type of Bayesian prior ('Ridge','RidgeIndivid','Zellner','ZellnerIndivid') 
 %   b) For nonlinear model 
-%   Model.numComp       : Number of linearly seperable components (at least 1)
-%   Model.numPrior      : Number of prior parameters on the component coefficients 
-%   Model.numNonlin     : Number of nonlinear parameters 
-%   Model.nonlinP0      : Starting value of nonlinear(mixing) parameters 
-%   Model.constantParams: Cell array of additional parameters to function 
-%   Model.fcn           : Function returning RDM and design matrix the 
+%    Model.numComp       : Number of linearly seperable components (at least 1)
+%    Model.numPrior      : Number of prior parameters on the component coefficients 
+%    Model.numNonlin     : Number of nonlinear parameters 
+%    Model.nonlinP0      : Starting value of nonlinear(mixing) parameters 
+%    Model.constantParams: Cell array of additional parameters to function 
+%    Model.fcn           : Function returning RDM and design matrix the 
 %                           partial derviates of the design matrix
 %   c) For both: 
 %    Model.ridgeparam: List of the regularisation parameter for all linear variables 
@@ -46,27 +47,46 @@ end;
 Y=dist'; 
 C= indicatorMatrix('allpairs',[1:numCond]); 
 
-% Make sigma 
-for s=1:numSubj
-    SigmaDist(:,:,s) = rsa_varianceLDC(zeros(1,numDist),C,Sigma(:,:,s),numPart,numVox(s)); 
+% Make sigma: is this a scalar, or a matrix per subject 
+if (size(Sigma,2)==1)
+    for s=1:numSubj
+        SigmaDist(:,:,s) = rsa_varianceLDC(zeros(1,numDist),C,eye(numCond)*Sigma(s),numPart,numVox(s)); 
+    end; 
+else % 
+    for s=1:numSubj
+        SigmaDist(:,:,s) = rsa_varianceLDC(zeros(1,numDist),C,Sigma(:,:,s),numPart,numVox(s)); 
+    end; 
 end; 
 
 % Simple linear component model 
 if (isfield(Model,'X'))  
     X=permute(Model.X,[2 1 3]); 
-    numReg = size(X,2); 
-    % TO BE IMPLEMENTED: 
-    % if (~isfield(Model.ridgeparam))
-    %     Model.ridgeparam=[1:numReg]; 
-    % end; 
-    theta0 = zeros(numReg,1);                                               % variance parameters: number of regressors    
-    theta  = minimize(theta0,@rsa_marglRidgeIndividEB,Opt.minimizeLength,X,Y,SigmaDist);     % Minmize the ridge parameter for the group 
-    [~,~,omega,~,nlml]=rsa_marglRidgeIndividEB(theta, X, Y, SigmaDist);     % Estimate the regression coefficients seperately 
+    numReg = size(X,2);     
+    switch (Model.prior) 
+        case 'Ridge' 
+            theta0 = 0;                                               % variance parameters: number of regressors    
+            theta  = minimize(theta0,@rsa_marglRidgeEB,Opt.minimizeLength,X,Y,SigmaDist);     % Minmize the ridge parameter for the group 
+            [~,~,omega,~,nlml]=rsa_marglRidgeEB(theta, X, Y, SigmaDist);     % Estimate the regression coefficients seperately 
+        case 'RidgeIndivid'
+            theta0 = zeros(numReg,1);                                               % variance parameters: number of regressors    
+            theta  = minimize(theta0,@rsa_marglRidgeIndividEB,Opt.minimizeLength,X,Y,SigmaDist);     % Minmize the ridge parameter for the group 
+            [~,~,omega,~,nlml]=rsa_marglRidgeIndividEB(theta, X, Y, SigmaDist);     % Estimate the regression coefficients seperately 
+        case 'Zellner' 
+            theta0 = 0;                                               % variance parameters: number of regressors    
+            theta  = minimize(theta0,@rsa_marglZellnerEB,Opt.minimizeLength,X,Y,SigmaDist);     % Minmize the ridge parameter for the group 
+            [~,~,omega,~,nlml]=rsa_marglZellnerEB(theta, X, Y, SigmaDist);     % Estimate the regression coefficients seperately 
+        case 'ZellnerIndivid' 
+            theta0 = zeros(numReg,1);                                               % variance parameters: number of regressors    
+            theta  = minimize(theta0,@rsa_marglZellnerIndividEB,Opt.minimizeLength,X,Y,SigmaDist);     % Minmize the ridge parameter for the group 
+            [~,~,omega,~,nlml]=rsa_marglZellnerIndividEB(theta, X, Y, SigmaDist);     % Estimate the regression coefficients seperately 
+        otherwise  
+            error('Prior needs to be Ridge, RidgeIndivid,Zellner,ZellnerIndivid'); 
+    end; 
+% Otherwise nonlinear fit, right now using only a Inidivdual Ridge prior 
 else
     theta0              = [zeros(Model.numPrior,1);Model.nonlinP0'];                % Add the variance parameters
     [theta, nlmls]      = minimize(theta0,@rsa_marglNonlin,Opt.minimizeLength,Model,Y,SigmaDist);    % Minmize the ridge parameter for the group 
     [~,~,omega,~,nlml]  = rsa_marglNonlin(theta, Model, Y, SigmaDist);              % Estimate the regression coefficients seperately 
-    %keyboard; 
 end;     
 omega       =  omega'; 
 logEvidence =  -nlml'; 

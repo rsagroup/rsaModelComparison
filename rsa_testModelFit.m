@@ -124,7 +124,7 @@ switch (what)
             S.sig_hat(n,1)= mean(diag(Sig_hat));               % Noise variance estimate
             Sigma(:,:,n) = Sig_hat;
         end;
-        
+        S.numVox = ones(size(S.RDM,1),1)*D.numVox;
         varargout = {S, Y, D, Sigma};
     case 'simulate_direct'              % Simulates distances directly for speed
         Model  = varargin{1};  % Input Model RDM
@@ -268,63 +268,75 @@ switch (what)
         %  - Single Zellner 
         %  - Individual Zellner 
         M1 = sh1_getRDMmodelTau1([-1 0 0 0],1,[1 2 4 6],'sqEuclidean');
-        D.numExp  =   10;           % 100 Experiments
+        M1.X = M1.RDM;      % Design matrix 
+        D.numExp  =   80;           % 100 Experiments
         D.numSubj = 10;     % 12 Partitipants
         D.numSim  = D.numExp * D.numSubj;
         % D.omega   = zeros(1,size(M1.RDM,1));
-        D.omega = [2 0 0 0]; 
-        D.var_e   = 0.5;
+        D.omega = [1 0 0 0]; 
+        D.var_e   = 50;
         D.numPart = 8;
         
         % figure(1);
         % rsa.fig.imageRDMs(M1);
         [S,Y,D]=rsa_testModelFit('simulate_data',M1,D);
+        
         S.exp   = kron([1:D.numExp]',ones(D.numSubj,1));
         S.subj  = kron(ones(D.numExp,1),[1:D.numSubj]');
         for i=1:D.numExp
             indx = find(S.exp==i);
             % Null Model: assuming all distances are zero
             S.logE0(indx,1)=...
-                rsa_fitModelNull(S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelNull(S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,S.numVox(indx));
             % IRLS fitting: Taking into account the noise covariance under
             % the current model fit
             S.omegaIRLS(indx,:) =...
-                rsa_fitModelIRLS(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelIRLS(M1.X',S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,S.numVox(indx));
+            
             % Using overall ridge estimated by empirical Bayes
+            M1.prior='Ridge'; 
             [S.omega1(indx,:),S.logE1(indx,1),S.logtheta1(indx,1)]=...
-                rsa_fitModelRidgeEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelHierarchEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,S.numVox(indx));
+            
             % Using Individual ridge paramtersestimated by empirical Bayes
+            M1.prior='RidgeIndivid'; 
             [S.omega2(indx,:),S.logE2(indx,1),lT]=...
-                rsa_fitModelRidgeIndividEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelHierarchEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,S.numVox(indx));
             S.logtheta2(indx,:)=repmat(lT,length(indx),1);
+            
             % Using overall Zellner g-prior 
+            M1.prior='Zellner'; 
             [S.omega3(indx,:),S.logE3(indx,1),S.logtheta3(indx,1)]=...
-                rsa_fitModelZellnerEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelHierarchEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,S.numVox(indx));
+            
             % Using individual Zellner g-prior
+            M1.prior='ZellnerIndivid'; 
             [S.omega4(indx,:),S.logE4(indx,1),lT]=...
-                rsa_fitModelZellnerIndividEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelHierarchEB(M1,S.RDM(indx,:),S.sig_hat(indx,:),D.numPart,S.numVox(indx));
             S.logtheta4(indx,:)=repmat(lT,length(indx),1);
 
-            
-            
             
             % Ceiling model
             res=bsxfun(@minus,S.RDM(indx,:),mean(S.RDM(indx,:)));
             S.logEC(indx,1)=...
-                rsa.stat.fitModelNull(res,S.sig_hat(indx,:),D.numPart,D.numVox);
+                rsa_fitModelNull(res,S.sig_hat(indx,:),D.numPart,S.numVox(indx));
         end;
         subplot(3,2,1);
-        barplot([],S.omegaGLS)
-        subplot(3,2,2);
         barplot([],S.omegaIRLS)
-        subplot(3,2,3);
+        title('IRLS'); 
+        subplot(3,2,2);
         barplot([],S.omega1);
+        title('Ridge'); 
+        subplot(3,2,3);
+        barplot([],S.omega2);
+        title('RidgeIndivid'); 
         subplot(3,2,4);
-        barplot([],[S.logE0 S.logE1 S.logE2 S.logEC]);
+        barplot([],S.omega3);
+        title('Zellner'); 
         subplot(3,2,5);
-        barplot([],S.omegaIn);
-        subplot(3,2,6);
-        barplot([],[S.logEInSplit]);
+        barplot([],S.omega4);
+        title('ZellnerIndivid'); 
+        
         
         varargout={S};
     case 'yokoiModel_synth'               % simulate Yokoi model of chunking experiment         

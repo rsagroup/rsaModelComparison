@@ -46,10 +46,11 @@ for s=1:numSubj
         dnlml(s) = -1/2*sum(sum(W.*(X(:,:,s)*V0X)));            % Derivative of L
     end;
     if (nargout>2)
-        wN(:,s)  = V0X'*alpha;                            % regression coefficients by Matrix inversion
+        wN(:,s)  = V0X*alpha;                            % regression coefficients by Matrix inversion
     end;
     if (nargout>3)
-        VN(:,:,s)  = V0 - V0X'*invS*V0X';                   % Posterior variance
+        V0         = (X(:,:,s)'*X(:,:,s))\eye(numReg)*exp(logtheta); 
+        VN(:,:,s)  = V0 - V0X*invS*V0X';                   % Posterior variance
         VN(:,:,s) = (VN(:,:,s)+VN(:,:,s)')/2; % Prevent asymmrety through roundoff.
     end;
 end;
