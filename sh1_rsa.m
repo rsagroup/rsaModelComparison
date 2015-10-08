@@ -16,7 +16,7 @@ volumenames = {'/Volumes/HD-PEBU2/Windows/myBackup/ICN/',...
     '/Users/joern/Projects'};%
 
 baseDir         = '/Users/joern/Projects/sh1';   % For Joern
-baseDir         = '/Volumes/DATA/MotorControl/data/SequenceLearning/sh1';   % For AY
+% baseDir         = '/Volumes/DATA/MotorControl/data/SequenceLearning/sh1';   % For AY
 
 fieldmapsDir    = fullfile(baseDir, 'fieldmaps');
 behaviourDir    = fullfile(baseDir, 'data');
@@ -153,7 +153,7 @@ omega_names = {'One-digit','Two-digit','Chunk','Sequence'};
 %% Main operation
 switch(what)
     case 'ROI_distraw'  % Extracts ROI data and calculates distances
-        T=[]; 
+        T=[];
         sn = varargin{1};
         chunkset = 'A';
         glm = 3;
@@ -216,26 +216,68 @@ switch(what)
                         
                         % get the distances
                         [S.RDM,Sw,S.effVox,S.trSS]=rsa_distanceLDCsepPerm(data,SPM,E.seqType);
-                        S.Sigma  = Sw(:)'; 
+                        S.Sigma  = Sw(:)';
                         S.region = reg;
                         S.subj  = s;
-                        S.hemis = hem; 
-                        S.numVox = numVox; 
-
-                        T=addstruct(T,S); 
+                        S.hemis = hem;
+                        S.numVox = numVox;
+                        
+                        T=addstruct(T,S);
                     end;
                 end;
             end;
         end;
         varargout={T};
         save(fullfile(regDir,'distances_sepPerm.mat'),'-struct','T');
+    case 'searchlight_distraw'         % **new** Calc G and pattern distance (prewhiten data using covariance matrix estimated from raw time series data)
+        sn              = varargin{1};
+        glm=3; 
+        numSigma 		= nSequence^2; % length of G matrix
+        numDist= nSequence*(nSequence-1)/2; % length of distance
+        suffix=[]; 
+        
+        home = cd;
+        for s = sn
+            glmDirSubj=fullfile(baseDir,glmName{glm},subj_name{s});
+            cd(glmDirSubj);
+            % load SPM.mat
+            
+            nii_out = {};
+            % Define output files
+            % dist -> 4D
+            for elem = 1:numDist
+                nii_out{end+1} = fullfile(glmDirSubj,[subj_name{s},'_dist_raw', suffix, '.nii,', num2str(elem)]);
+            end
+            % sigma -> 4D
+            for elem = 1:numSigma
+                nii_out{end+1} = fullfile(glmDirSubj,[subj_name{s},'_sigma_raw', suffix, '.nii,', num2str(elem)]);
+            end
+            
+            % effVox
+            nii_out{end+1} = fullfile(glmDirSubj,[subj_name{s},'effVox', suffix, '.nii']);
+            
+            % load search light definition, etc.
+            load(fullfile(glmDirSubj,'SPM.mat'));
+            SPM = spmj_move_rawdata(SPM,fullfile(baseDir,'imaging_data',subj_name{s},'sess1'));
+            T   = load(fullfile(glmDirSubj,'SPM_info.mat'));
+            
+            %SPM = spmj_move_rawdata(SPM,fullfile(baseDir,'imaging_data',subj_name{s},'sess1'));
+            SL  = load(fullfile(glmDirSubj,['vol_roi_160vox.mat']));
+            idx = find(T.regType==1);
+            
+            params = {SPM,T.seqNum(idx,1)};
+            
+            % run searchlight analysis
+            lmva_spm(SL,SPM.xY.P,nii_out,@sh1_calcDistancePerm,'params',params,'isNP',1);
+        end % s
+        
     case 'ROI_reliability_btw' % Calculate between subject reliability of RDMs
         
-         C = [];
+        C = [];
         for glm = [1 3]
             % load data set
             T = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm)));
-           
+            
             chunksets = {'A','B'};
             for reg = [1:8]
                 for h = [1 2]
@@ -257,7 +299,7 @@ switch(what)
                             
                             % we must choose only the distance between physically identical sequences here
                             tmprdm      = getCommon(rdm,[3 5 7]);
-                            tmprdm_     = getCommon(rdm_all_,[3 5 7]);                            
+                            tmprdm_     = getCommon(rdm_all_,[3 5 7]);
                             R.across    = corr(tmprdm',tmprdm_','type','Pearson'); % across chunk set corr
                             
                             tmprdm      = getCommon(rdm,[3 5 7]);
@@ -278,39 +320,39 @@ switch(what)
         end
         
         for glm=[1 3]
-        figure('name',sprintf('reliability (glm=%d)',glm));
+            figure('name',sprintf('reliability (glm=%d)',glm));
             D = getrow(C,C.glm==glm);
             sh1_rsa('plot_reliability_btw',D);
         end
         
         varargout = {C};
         
-    case 'fit_model_EB_lin' 
-        T=load(fullfile(regDir,'distances_sepPerm.mat')); 
-        regions=unique(T.region); 
-        for r=regions' 
-            for h=[1 2] 
-                indx = find(T.region==r & T.hemis==h); 
-                D=getrow(T,indx); 
-                for cs = 1:2 
-                        Xm(1,:,cs)=sh1_getRDMtempw(cs,1,-2,'sqEuclidean'); % One digit 
-                        Xm(2,:,cs)=sh1_getRDMtempw(cs,2,1,'sqEuclidean'); % two digit  
-                        Xm(3,:,cs)=sh1_getRDMtempw(cs,4,0,'sqEuclidean'); % chunk 
-                        Xm(4,:,cs)=sh1_getRDMtempw(cs,6,1,'sqEuclidean'); % sequence
-                        Xm(:,:,cs)=bsxfun(@rdivide,Xm(:,:,cs),sqrt(sum(Xm(:,:,cs).^2,2))); 
+    case 'fit_model_EB_lin'
+        T=load(fullfile(regDir,'distances_sepPerm.mat'));
+        regions=unique(T.region);
+        for r=regions'
+            for h=[1 2]
+                indx = find(T.region==r & T.hemis==h);
+                D=getrow(T,indx);
+                for cs = 1:2
+                    Xm(1,:,cs)=sh1_getRDMtempw(cs,1,-2,'sqEuclidean'); % One digit
+                    Xm(2,:,cs)=sh1_getRDMtempw(cs,2,1,'sqEuclidean'); % two digit
+                    Xm(3,:,cs)=sh1_getRDMtempw(cs,4,0,'sqEuclidean'); % chunk
+                    Xm(4,:,cs)=sh1_getRDMtempw(cs,6,1,'sqEuclidean'); % sequence
+                    Xm(:,:,cs)=bsxfun(@rdivide,Xm(:,:,cs),sqrt(sum(Xm(:,:,cs).^2,2)));
                 end;
                 for s=1:length(D.subj)
-                    Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8); 
-                end; 
-                Model.X=Xm(:,:,chunk_set(D.subj)); 
+                    Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8);
+                end;
+                Model.X=Xm(:,:,chunk_set(D.subj));
                 [omega(indx,:),logEvidence(indx,:),lt]=rsa_fitModelHierarchEB(Model,D.RDM,Sigma,9,D.effVox);
-                logtheta(indx,:)=repmat(lt,length(indx),1); 
-            end; 
-        end; 
-        T.omega=omega; 
-        T.logtheta=logtheta; 
-        varargout={T}; 
-    case 'fit_model_EB_nonlin' 
+                logtheta(indx,:)=repmat(lt,length(indx),1);
+            end;
+        end;
+        T.omega=omega;
+        T.logtheta=logtheta;
+        varargout={T};
+    case 'fit_model_EB_nonlin'
         glm = 1;
         useolddata = 1;
         vararginoptions(varargin(:),{'glm','useolddata'})
@@ -322,19 +364,19 @@ switch(what)
             %T       = T.RDM1;
             T.RDM   = bsxfun(@rdivide,T.RDM,T.numVox);
         else
-            T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm))); 
+            T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm)));
         end
-                        
+        
         %regions=unique(T.region);
         regions=[1:8]';
         mRDM = [];
-        for r=regions' 
-            for h=[1 2] 
-                indx = find(T.region==r & T.hemis==h); 
-                D=getrow(T,indx); 
+        for r=regions'
+            for h=[1 2]
+                indx = find(T.region==r & T.hemis==h);
+                D=getrow(T,indx);
                 for s=1:length(D.subj)
-                    Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8); 
-                end; 
+                    Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8);
+                end;
                 
                 % organize model RDMs
                 Model.fcn = @sh1_getRDMmodelTau1;
@@ -346,23 +388,23 @@ switch(what)
                 Model.numPrior  = numel(Model.constantParams{2}); % Number of prior variances on parameters
                 Model.numNonlin = numel(Model.constantParams{2}); % Number of nonlinear parameters
                 Model.nonlinP0  = [-10 1 10 0];%zeros(size(Model.constantParams{2})); % Starting value of nonlinear(mixing) parameters
-                        
+                
                 % estimate
                 [w,logEvidence(indx,:),lt] = rsa_fitModelHierarchEB(Model,D.RDM,Sigma,9,D.effVox);
                 
-                % 
-                logtheta(indx,:)=repmat(lt,length(indx),1); 
+                %
+                logtheta(indx,:)=repmat(lt,length(indx),1);
                 
                 % normalize omega with mean of each RDM
                 M = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-                          Model.constantParams{:});
-                omega(indx,:) = w.*permute(mean(M.RDM,2),[3 1 2]);  
+                    Model.constantParams{:});
+                omega(indx,:) = w.*permute(mean(M.RDM,2),[3 1 2]);
                 
-                % save resultant RDMs with estimated tau                
+                % save resultant RDMs with estimated tau
                 A = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-                          1,Model.constantParams{2:end}); % chunk set A
+                    1,Model.constantParams{2:end}); % chunk set A
                 B = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-                          2,Model.constantParams{2:end}); % chunk set B
+                    2,Model.constantParams{2:end}); % chunk set B
                 mrdm.RDM    = [A.RDM;B.RDM];
                 mrdm.set    = kron([1 2]',ones(Model.numComp,1));
                 mrdm.comp   = repmat(Model.constantParams{2}',2,1);
@@ -370,19 +412,19 @@ switch(what)
                 mrdm.region = repmat(r,size(mrdm.set));
                 mrdm.hemis  = repmat(h,size(mrdm.set));
                 mRDM        = addstruct(mRDM,mrdm);
-                % 
-            end; 
-        end; 
-        T.omega=omega; 
-        T.logtheta=logtheta; 
+                %
+            end;
+        end;
+        T.omega=omega;
+        T.logtheta=logtheta;
         T.logEvidence=logEvidence;
         %T.logEvidenceSplit = logEvidenceSplit;
         
         sh1_rsa('plot_omega_prior',T);
         sh1_rsa('plot_prior',T);
         sh1_rsa('plot_tau',T);
-        varargout={T,mRDM}; 
-    case 'fit_model_EB_nonlin_poolROI' 
+        varargout={T,mRDM};
+    case 'fit_model_EB_nonlin_poolROI'
         glm = 3;
         useolddata = 0;
         modelTerms = [1 2 4 6];
@@ -399,10 +441,10 @@ switch(what)
             %T       = T.RDM1;
             T.RDM   = bsxfun(@rdivide,T.RDM,T.numVox);
         else
-            T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm))); 
+            T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm)));
         end
-                        
-        % pool all ROI data to estimate single tau parameter for whole brain        
+        
+        % pool all ROI data to estimate single tau parameter for whole brain
         mRDM = [];
         indx = find(ismember(T.region,region)&T.hemis==1);%true(size(T.subj));%find(T.region==1&T.hemis==1);
         D=getrow(T,indx);
@@ -467,14 +509,14 @@ switch(what)
             D.omega         = omega;
             D.omegaN        = omegaN;
             D.logtheta      = logtheta;
-            D.logEvidence   = logEvidence;            
+            D.logEvidence   = logEvidence;
             %D.logEvidenceSplit = logEvidenceSplit;
             
             TT = addstruct(TT,D);
             
             %sh1_rsa('plot_omega_prior',D);
             %sh1_rsa('plot_prior',D);
-            %sh1_rsa('plot_tau',D);            
+            %sh1_rsa('plot_tau',D);
         end
         figure;
         subplot(3,2,[1 2])
@@ -489,8 +531,8 @@ switch(what)
             'subset',ismember(TT.maxidx,[1:10:100]));ylabel('Omega')
         
         
-        varargout={TT,mRDM}; 
-    case 'fit_model_EB_nonlin_singlemodel' % fit single model to compare log-evidence 
+        varargout={TT,mRDM};
+    case 'fit_model_EB_nonlin_singlemodel' % fit single model to compare log-evidence
         glm = 3;
         useolddata = 0;
         modelTerms = [1 2 4 6];
@@ -504,15 +546,15 @@ switch(what)
             %T       = T.RDM1;
             T.RDM   = bsxfun(@rdivide,T.RDM,T.numVox);
         else
-            T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm))); 
+            T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm)));
         end
-                
+        
         %regions=unique(T.region);
         regions=[2 3 4 5 7]';
         for r=regions'
             fprintf('Estimating ROI distance %s...\n',regname{r});
             for h=[1 2]
-                for m=1:numel(modelTerms)                    
+                for m=1:numel(modelTerms)
                     indx = find(T.region==r & T.hemis==h);
                     D=getrow(T,indx);
                     for s=1:length(D.subj)
@@ -557,7 +599,7 @@ switch(what)
         sh1_rsa('plot_prior',T);
         sh1_rsa('plot_tau',T);
         varargout={T};
-    case 'fit_model_EB_nonlin_multiguess' 
+    case 'fit_model_EB_nonlin_multiguess'
         glm         = 1;
         useolddata  = 1;
         modelTerms  = [1 2 4 6];
@@ -571,19 +613,19 @@ switch(what)
             %T       = T.RDM1;
             T.RDM   = bsxfun(@rdivide,T.RDM,T.numVox);
         else
-            T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm))); 
+            T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm)));
         end
-                        
+        
         %regions=unique(T.region);
         regions=[1:2]';
         mRDM = [];
-        for r=regions' 
-            for h=[1 2] 
-                indx = find(T.region==r & T.hemis==h); 
-                D=getrow(T,indx); 
+        for r=regions'
+            for h=[1 2]
+                indx = find(T.region==r & T.hemis==h);
+                D=getrow(T,indx);
                 for s=1:length(D.subj)
-                    Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8); 
-                end; 
+                    Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8);
+                end;
                 
                 for iter = 1:Niter
                     iter
@@ -608,22 +650,22 @@ switch(what)
                 end
                 maxidx = find(mevid==max(mevid),1,'first');
                 % choose one
-                logtheta(indx,:)    = repmat(lt(maxidx,:),length(indx),1); 
+                logtheta(indx,:)    = repmat(lt(maxidx,:),length(indx),1);
                 w                   = squeeze(w(:,:,maxidx));
                 logEvidence(indx,:) = levid(:,maxidx);
                 
                 % normalize omega with mean of each RDM
                 M = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-                          Model.constantParams{:});
+                    Model.constantParams{:});
                 normX = sqrt(mean(M.RDM.^2,2));
                 omega(indx,:) = w;
                 omegaN(indx,:) = bsxfun(@times,w,normX');
                 
-                % save resultant RDMs with estimated tau                
+                % save resultant RDMs with estimated tau
                 A = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-                          1,Model.constantParams{2:end}); % chunk set A
+                    1,Model.constantParams{2:end}); % chunk set A
                 B = feval(Model.fcn,lt(Model.numPrior+1:Model.numPrior+Model.numNonlin),...
-                          2,Model.constantParams{2:end}); % chunk set B
+                    2,Model.constantParams{2:end}); % chunk set B
                 mrdm.RDM    = [A.RDM;B.RDM];
                 mrdm.set    = kron([1 2]',ones(Model.numComp,1));
                 mrdm.comp   = repmat(Model.constantParams{2}',2,1);
@@ -631,18 +673,18 @@ switch(what)
                 mrdm.region = repmat(r,size(mrdm.set));
                 mrdm.hemis  = repmat(h,size(mrdm.set));
                 mRDM        = addstruct(mRDM,mrdm);
-                % 
-            end; 
-        end; 
-        T.omega=omega; 
-        T.logtheta=logtheta; 
+                %
+            end;
+        end;
+        T.omega=omega;
+        T.logtheta=logtheta;
         T.logEvidence=logEvidence;
         %T.logEvidenceSplit = logEvidenceSplit;
         
         sh1_rsa('plot_omega_prior',T);
         sh1_rsa('plot_prior',T);
         sh1_rsa('plot_tau',T);
-        varargout={T,mRDM}; 
+        varargout={T,mRDM};
         
     case 'plot_omega'
         T=varargin{1};
@@ -724,7 +766,7 @@ switch(what)
         barwidth = 0.8;
         
         Nregion = numel(region);
-        figure('name',sprintf('Between subject reliability of RDM'),'color','w');        
+        figure('name',sprintf('Between subject reliability of RDM'),'color','w');
         for reg = region;
             fprintf('%s',regname{reg})
             count=0;
@@ -778,17 +820,19 @@ switch(what)
         disp('there is no such case.')
 end;
 
-    function RDMout = getCommon(RDMin, seqnum);
-        % RDMin : vectorised RDM
-        % RDMout: vectorised RDM
-        % seqnum: seq of no interest
-        
-        I = true(nSequence);
-        I(diag(diag(I))) = false;
-        I(seqnum,:) = false;
-        I(:,seqnum) = false;
-        
-        RDMout = RDMin(:,squareform(I));        
-    end
+function RDMout = getCommon(RDMin, seqnum);
+% RDMin : vectorised RDM
+% RDMout: vectorised RDM
+% seqnum: seq of no interest
 
-end
+I = true(nSequence);
+I(diag(diag(I))) = false;
+I(seqnum,:) = false;
+I(:,seqnum) = false;
+
+RDMout = RDMin(:,squareform(I));
+
+
+function out = sh1_calcDistancePerm(data,SPM,seqType);
+[RDM,Sw,effVox]=rsa_distanceLDCsepPerm(data,SPM,seqType);
+out=[RDM(:);Sw(:);effVox];

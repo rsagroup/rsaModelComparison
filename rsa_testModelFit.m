@@ -267,18 +267,19 @@ switch (what)
         %  - Individual Ridge 
         %  - Single Zellner 
         %  - Individual Zellner 
-        M1 = sh1_getRDMmodelTau1([-1 0 0 0],1,[1 2 4 6],'sqEuclidean');
+        M1 = sh1_getRDMmodelTau1([-2 1.5 -1 0],1,[1 2 4 6],'sqEuclidean');
         M1.X = M1.RDM;      % Design matrix 
-        D.numExp  =   80;           % 100 Experiments
-        D.numSubj = 10;     % 12 Partitipants
+        D.numExp  =   10;           % 100 Experiments
+        D.numSubj = 14;     % 12 Partitipants
         D.numSim  = D.numExp * D.numSubj;
         % D.omega   = zeros(1,size(M1.RDM,1));
-        D.omega = [1 0 0 0]; 
-        D.var_e   = 50;
+        D.omega = [0 0 0.6 0]; 
+        D.var_e   = 80;
         D.numPart = 8;
         
         % figure(1);
         % rsa.fig.imageRDMs(M1);
+        corrN(M1.X')
         [S,Y,D]=rsa_testModelFit('simulate_data',M1,D);
         
         S.exp   = kron([1:D.numExp]',ones(D.numSubj,1));
@@ -336,7 +337,13 @@ switch (what)
         subplot(3,2,5);
         barplot([],S.omega4);
         title('ZellnerIndivid'); 
-        
+       
+        for i=1:4 
+            for j=1:4 
+                [t(j),p(j)]=ttest(S.(sprintf('omega%d',i))(:,j),[],1,'onesample');
+            end;
+            fprintf('%1.4f %1.4f %1.4f %1.4f\n',p);
+        end;
         
         varargout={S};
     case 'yokoiModel_synth'               % simulate Yokoi model of chunking experiment         
