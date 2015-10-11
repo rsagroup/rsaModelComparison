@@ -349,7 +349,7 @@ switch (what)
     case 'yokoiModel_synth'               % simulate Yokoi model of chunking experiment         
         % True hyper parameters
         modelTerms  = varargin{1};
-        tau         = varargin{2};        % temporal decay of features 
+        logtau      = varargin{2};        % temporal decay of features 
         v           = varargin{3};            % variance of true omegas
         w0          = varargin{4};            % mean of true omegas;        
         
@@ -357,7 +357,7 @@ switch (what)
         D.numExp    = 1;     % 100 Experiments
         D.numSubj   = 14;     % 12 Partitipants
         D.var_e     = 50;
-        D.numPart   = 8;        
+        D.numPart   = 9;        
         D           = getUserOptions({varargin{5:end}},D);
         D.numSim    = D.numExp * D.numSubj;        
         D.omega     = repmat(w0,D.numSim,1); 
@@ -367,7 +367,7 @@ switch (what)
         
         % Define model structure (using one-digit, two-digit, chunk, and
         % sequence models)
-        logtau          = log(tau);             % log of tau
+        logtau          = logtau;             % log of tau
         constantParams  = {1,modelTerms,'sqEuclidean'}; %[1 2 4 6]
         Model           = sh1_getRDMmodelTau1(logtau,constantParams{:});
         Model.name_orig = Model.name;
@@ -379,7 +379,7 @@ switch (what)
         Model.constantParams    = constantParams;
         Model.numComp           = numel(modelTerms);
         Model.numPrior          = numel(v);
-        Model.numNonlin         = numel(tau);
+        Model.numNonlin         = numel(logtau);
         Model.nonlinP0          = zeros(1,Model.numNonlin);
         Model.constantParams    = constantParams;
         Model.fcn               = @sh1_getRDMmodelTau1;        
@@ -399,7 +399,7 @@ switch (what)
         
         % True hyper parameters
         modelTerms  = [1 2 4 6];
-        tau         = [0.05 13 5 1000];        % temporal decay of features 
+        tau         = log([0.05 13 5 1000]);        % temporal decay of features 
         v           = [1 1 1 1];            % variance of true omegas
         w0          = [3 0 0 0];            % mean of true omegas;        
                 
@@ -424,7 +424,7 @@ switch (what)
     case 'test_HierarchEB_estimate_yokoiModel'  % test model by estimating 
         % True hyper parameters
         modelTerms  = [1 2 4 6];
-        tau         = [0.05 13 5 1000];         % temporal decay of features 
+        tau         = log([0.05 13 5 1000]);         % temporal decay of features 
         v           = [1 1 1 1];                % variance of true omegas
         w0          = [0 3 0 0];                % mean of true omegas;        
 
@@ -522,7 +522,7 @@ switch (what)
         D.numExp =10; 
         D.numSubj=10; 
         T=[]; 
-        [S,D,Sigma,Model] = rsa_testModelFit('yokoiModel_synth',modelTerms,exp(logtau),v,w0,D);
+        [S,D,Sigma,Model] = rsa_testModelFit('yokoiModel_synth',modelTerms,logtau,v,w0,D);
                        
         % Redefine model for fit
         reducedModelTerms       = [1 2 4 6]; 
@@ -568,6 +568,116 @@ switch (what)
         end; 
         
         varargout={T};        
+    case 'test_Zellner_individ_taufamily'
+        % True hyper parameters
+        modelTerms  = [1 2 4 6];
+        tau         = [-5 5 5 5];         % temporal decay of features 
+        v           = [1 1 1 1];                % variance of true omegas
+        w0          = [5 0 0 0];                % mean of true omegas;        
+        logtaus     = [-1.5:0.75:1.5];
+
+        % Synthesise data with given hyper parameters
+        [S,D,Sigma,Model] = rsa_testModelFit('yokoiModel_synth',modelTerms,tau,v,w0);
+               
+        % Estimate both group hyper parameters using all data and then
+        %   estimate omega
+        
+        % Redefine model for fit
+        ModelFamily = sh1_getRDMTau('dend','logtaus',logtaus,'modelTerms',[2 4]);
+        ModelFamily.prior = 'ZellnerIndivid';
+        ModelFamily.X = ModelFamily.RDM;
+        ModelFamily.numPrior = size(ModelFamily.RDM,1);
+        
+        for i=1:D.numExp
+            indx = find(S.exp==i);
+            [S.omega_hat(indx,:),S.logEvidence(indx,:),theta]=...,S.logEvidenceSplit(indx,:)] = ...
+                rsa_fitModelHierarchEB(ModelFamily,S.RDM(indx,:),Sigma(:,:,indx),D.numPart,...
+                repmat(D.numVox,D.numSim,1),'minimiseLength',1000);
+            
+            % Summary result
+            S.logvarV(indx,:) = kron(ones(D.numSubj,1),theta(1:ModelFamily.numPrior));
+            S.logtau(indx,:)  = kron(ones(D.numSubj,1),theta(ModelFamily.numPrior+1:end));
+            
+            % post-process of omega to adjust by mean of regressor            
+            normX = sqrt(mean(ModelFamily.X.^2,2));  
+            S.omega_hatn(indx,:) = bsxfun(@times,S.omega_hat(indx,:),normX');
+        end;
+        
+        figure;
+        subplot(1,3,1);
+        barplot([],S.omega_hatn(:,ModelFamily.idx'),'barwidth',0.5);
+        set(gca,'xticklabel',ModelFamily.name(ModelFamily.idx),'view',[270 90]);
+        title('omega_hat_normalised')
+        subplot(1,3,2);
+        plot([1:length(normX)],normX(ModelFamily.idx)');
+        set(gca,'xtick',[1:length(normX)],'xticklabel',ModelFamily.name(ModelFamily.idx),'view',[270 90]);
+        title('norm(X)')
+    case 'test_singlemodel_taufamily'
+        % True hyper parameters
+        modelTerms  = [1 2 4 6];
+        tau         = [-5 5 5 5];         % temporal decay of features 
+        v           = [1 1 1 1];                % variance of true omegas
+        w0          = [0 0 5 6];                % mean of true omegas;        
+        logtaus     = [-1.5:0.3:1.5];
+
+        vararginoptions(varargin,{'modelTerms','w0','tau','logtaus'});
+        
+        % Synthesise data with given hyper parameters
+        [S,D,Sigma,Model] = rsa_testModelFit('yokoiModel_synth',modelTerms,tau,v,w0);
+               
+        % Get model family
+        ModelFamily = sh1_getRDMTau('dend','logtaus',logtaus,'modelTerms',[2 4]);
+        ModelFamily.prior = 'Zellner';%'Zellner';
+        ModelFamily.X = ModelFamily.RDM;
+        ModelFamily.numPrior = size(ModelFamily.RDM,1);
+        ModelFamily.Nmodel = size(ModelFamily.X,1);
+        ModelFamily.numComp = size(ModelFamily.X,1);
+        
+        for i=1:D.numExp
+            indx = find(S.exp==i);
+            
+            % get logEvidence for null model
+            % null model            
+            logEvidence0(indx,1) = rsa.stat.fitModelNull(S.RDM(indx,:),S.sig_hat(indx),D.numPart,D.numVox);
+                
+            % fit single model
+            for m = 1:ModelFamily.Nmodel
+                
+                F = ModelFamily;
+                F.X = F.X(m,:); % pick single model term
+                
+                [S.omega_hat(indx,m),S.logEvidence(indx,m),theta]=...,S.logEvidenceSplit(indx,:)] = ...
+                    rsa_fitModelHierarchEB(F,S.RDM(indx,:),Sigma(:,:,indx),D.numPart,...
+                    repmat(D.numVox,D.numSim,1),'minimiseLength',100);
+                
+                % Summary result
+                S.logtheta(indx,m) = kron(ones(D.numSubj,1),theta(1));
+                
+                % post-process of omega to adjust by mean of regressor
+                normX = sqrt(mean(F.X.^2,2));
+                S.omega_hatn(indx,m) = bsxfun(@times,S.omega_hat(indx,m),normX');
+                
+                % adjust logEvidence
+                %S.logEvidence(indx,m) = S.logEvidence(indx,m)-logEvidence0(indx,1); % difference from null model            
+            end
+            
+            % adjust by logEvidence0
+            S.logEvidence(indx,:) = S.logEvidence(indx,:)-repmat(logEvidence0,1,F.numComp); % difference from null model
+            
+        end;
+        
+        figure;
+        subplot(1,2,1)
+        barplot([],S.logEvidence(:,F.idx'),'barwidth',0.5);
+        set(gca,'xticklabel',ModelFamily.name(ModelFamily.idx),'view',[270 90],'fontsize',12);
+        ylabel('logEvidence','fontsize',12);
+        
+        subplot(1,2,2);
+        barplot([],S.omega_hatn(:,ModelFamily.idx'),'barwidth',0.5);
+        set(gca,'xticklabel',ModelFamily.name(ModelFamily.idx),'view',[270 90],'fontsize',12);
+        ylabel('normalised omega','fontsize',12);
+        
+        varargout = {S};
 end;
 
 
