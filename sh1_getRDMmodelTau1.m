@@ -17,6 +17,7 @@ function Model=sh1_getRDMmodelTau1(logtau,chunkset,components,distfun);
 %          sequence       (6)
 %   distfun:
 %          Distance function for activtion (cityblock, sqEucledian)
+%          or normSqEucledian 
 % OUTPUT:
 %   Model.name:         Name of the components (Kx1) cell array
 %   Model.RDM:          Predicted distances under that component and tau
@@ -136,6 +137,9 @@ for i=1:numComp
                 Model.RDM(i,:,c)          = sum((Con*Pattern).^2,2)';
                 Model.dRDMdTheta(:,:,i,c) = zeros(numParam,numDist);                
                 Model.dRDMdTheta(i,:,i,c) = sum(2*(Con*dPattern).*(Con*Pattern),2); % Fix: corrected derivative
+            case 'normSqEuclidean'
+                Model.RDM(i,:,c)          = sum((Con*Pattern).^2,2)';
+                Model.RDM(i,:,c)          = bsxfun(@rdivide,Model.RDM(i,:,c),sqrt(mean(Model.RDM(i,:,c).^2)));
             otherwise
                 error('wrong parameter for distfun');
         end;

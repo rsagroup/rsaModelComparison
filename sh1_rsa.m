@@ -447,29 +447,64 @@ switch(what)
         varargout = {All};
         
     case 'fit_model_EB_lin'
+        method = 'ZellnerIndivid'; 
+        vararginoptions(varargin,{'method'}); 
+
+        
         T=load(fullfile(regDir,'distances_sepPerm.mat'));
+        T.chunk_set = chunk_set(T.subj)'; 
         regions=unique(T.region);
+        
+        % Seperate models for the two chunk sets 
+        Mod(1) = sh1_getRDMmodelTau1([-6.18 -0.243 -0.898 1],1,[1 2 4 6],'normSqEuclidean'); 
+        Mod(2) = sh1_getRDMmodelTau1([-6.18 -0.243 -0.898 1],2,[1 2 4 6],'normSqEuclidean'); 
+        Mod(1).numNonlin = 0;   
+        Mod(2).numNonlin = 0;   
+
         for r=regions'
             for h=[1 2]
+                % Get the data to be fitted 
                 indx = find(T.region==r & T.hemis==h);
-                D=getrow(T,indx);
-                for cs = 1:2
-                    Xm(1,:,cs)=sh1_getRDMtempw(cs,1,-2,'sqEuclidean'); % One digit
-                    Xm(2,:,cs)=sh1_getRDMtempw(cs,2,1,'sqEuclidean'); % two digit
-                    Xm(3,:,cs)=sh1_getRDMtempw(cs,4,0,'sqEuclidean'); % chunk
-                    Xm(4,:,cs)=sh1_getRDMtempw(cs,6,1,'sqEuclidean'); % sequence
-                    Xm(:,:,cs)=bsxfun(@rdivide,Xm(:,:,cs),sqrt(sum(Xm(:,:,cs).^2,2)));
+
+                % Generate the model for all subject you are fitting 
+                Model = sh1_getRDMmodelTau1([-6.18 -0.243 -0.898 1],chunk_set(T.subj(indx)),[1 2 4 6],'normSqEuclidean'); 
+                Model.numNonlin = 0;   
+
+                % Assemble the design matrices 
+                for s=1:length(indx)
+                    Sigma(:,:,s)=reshape(T.Sigma(indx(s),:),8,8);
                 end;
-                for s=1:length(D.subj)
-                    Sigma(:,:,s)=reshape(D.Sigma(s,:),8,8);
-                end;
-                Model.X=Xm(:,:,chunk_set(D.subj));
-                [omega(indx,:),logEvidence(indx,:),lt]=rsa_fitModelHierarchEB(Model,D.RDM,Sigma,9,D.effVox);
-                logtheta(indx,:)=repmat(lt,length(indx),1);
+
+                % Do the fit
+                switch(method)
+                    case 'OLS'
+                        for i=1:2 
+                            indx = find(T.chunk_set==i & T.region==r & T.hemis==h);
+                            T.omega(indx,:)=rsa.stat.fitModelOLS(Mod(i),T.RDM(indx,:)); 
+                        end; 
+                    case 'GLS' 
+                        for i=1:2 
+                            indx = find(T.chunk_set==i & T.region==r & T.hemis==h);
+                            T.omega(indx,:)=rsa_fitModelGLS(Mod(i),T.RDM(indx,:),T.Sigma(indx,:),9,T.effVox(indx,1)); 
+                        end; 
+                    case 'IRLS' 
+                        for i=1:2 
+                            indx = find(T.chunk_set==i & T.region==r & T.hemis==h);
+                            T.omega(indx,:)=rsa_fitModelIRLS(Mod(i),T.RDM(indx,:),T.Sigma(indx,:),9,T.effVox(indx,1)); 
+                        end;
+                        
+                   case {'Ridge','Zellner','RidgeIndivid','ZellnerIndivid'}
+                        Model.prior=method; 
+                        [T.omega(indx,:),T.logEvidence(indx,:),lt]=rsa_fitModelHierarchEB(Model,T.RDM(indx,:),Sigma,9,T.effVox(indx,1));
+                        T.theta(indx,:)=repmat(lt,length(indx),1);
+                end; 
             end;
         end;
-        T.omega=omega;
-        T.logtheta=logtheta;
+        subplot(2,1,1); 
+        barplot(T.region,T.omega,'subset',T.hemis==1); 
+        subplot(2,1,2); 
+        barplot(T.region,T.omega,'subset',T.hemis==2); 
+        set(gcf,'Name',method); 
         varargout={T};
     case 'fit_model_EB_nonlin'
         glm = 1;
@@ -685,7 +720,7 @@ switch(what)
                 end;
                 
                 % Fit the Null model
-                logEvidence0 = rsa_fitModelNull(D.RDM,Sigma,9,D.effVox);
+                logEvidence0 = rsa_fitModelNull(D.RDM,D.Sigma,9,D.effVox);
                 
                 for m = 1:numel(modelTerms)
                     m
@@ -919,9 +954,6 @@ switch(what)
         end
         
         varargout = {T};
-    case 'fit_singlemodel_tau'      % Fits and compares all single models in all regions - allowing for flexble tau
-        
-        
     case 'plot_omega'
         T=varargin{1};
         
