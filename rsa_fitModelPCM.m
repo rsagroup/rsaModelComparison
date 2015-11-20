@@ -1,12 +1,11 @@
-function [omega,logEvidence,theta,logEvidenceSplit]=rsa_fitModelHierarchEB(Model,dist,Sigma,numPart,numVox,varargin);
+function [omega,logEvidence,theta,logEvidenceSplit]=rsa_fitModelPCM(Model,U,conditionVec,partitionVec);
 % function [omega,logEvidence,logtheta]=rsa_fitModelRidgeIndividEB(X,dist,sigma,numPart,numVox,varargin);
 % Does a linear fir (component reweighting) or nonlinear fit (remixing)
 % fit.
 % For linear fit, set the numNonlin field to 0.
 % INPUT:
 %  Model   : Model structure with optional fields
-%    Model.RDM :  numReg  x numDist (x numSubj): Design matrix,
-%             if different across subject, 3-d structure with one slice per subject
+%    Model.RDM :  numReg  x numDist: Design matrix,
 %    Model.prior: type of Bayesian prior ('Ridge','RidgeIndivid','Zellner','ZellnerIndivid')
 %    Model.numComp       : Number of linearly seperable components (at least 1)
 %    Model.numPrior      : Number of prior parameters on the component coefficients
@@ -18,14 +17,11 @@ function [omega,logEvidence,theta,logEvidenceSplit]=rsa_fitModelHierarchEB(Model
 %    Model.ridgeparam: List of the regularisation parameter for all linear variables
 %                      which parameter refers to which column (defaults to [1:numCol])
 %
-%  dist    : numSubj x numDist          : Data, with subjects stacked in rows
-%  Sigma   : numCond x numCond x numSubj : Estimated variance matrix of
-%  numPart : Number of partitions
-%  numVox  : numSubj x 1 Effective number of voxels
-% OPTIONAL
-%  'minimizeLength': Length of line search parameter (see help minimize)
+%  U:               numTrials x numVox (x numSubj) : prewhitened regression estimates 
+%  conditionVec:    numTrials x 1: Conditions for the design matrx 
+%  partitionVec:    numTrials x 1: Partitions for the data 
 % OUTPUT:
-%   omega:       estimates of the regression coefficients, 1 row per subject
+%   omega:       estimates of the variance parameters (noise + run effect) 
 %   logEvidence: Marginal likelihood of the model
 %   logtheta:    logvariance of prior, as determined by empirical Bayes
 import rsa.util.*;
@@ -33,36 +29,26 @@ import rsa.*;
 
 % Options: Not used right now
 Opt = [];
-Opt.minimizeLength = 10;
 Opt=rsa.getUserOptions(varargin,Opt);
 
+[numTrials,numVox]=size(U);
+numCond = max(conditionVec); 
+numPart = max(partitionVec); 
+[numReg,numDist]=size(Nodel.RDM); 
 
-[numSubj,numDist]=size(dist);
-numCond = ceil(sqrt(numDist*2));
-if (numCond*(numCond-1)/2~=numDist)
-    error('bad size of distances');
-end;
-
-Y=dist';
 C= indicatorMatrix('allpairs',[1:numCond]);
 
-% Make sigma: is this a scalar, or a matrix per subject
-for s=1:numSubj
-    if (size(Sigma,2)==1)
-        S = eye(numCond)*Sigma(s);
-    elseif (size(Sigma,3)==numSubj) %
-        S = Sigma(:,:,s);
-    elseif (size(Sigma,1)==numSubj & size(Sigma,2)==numCond*numCond)
-        S = reshape(Sigma(s,:),numCond,numCond);
-    elseif  (size(Sigma,1)==numSubj & size(Sigma,2)==numCond*(numCond-1)/2)
-        S = rsa_squareIPM(Sigma(s,:));
-    else
-        error('Sigma does not have legal size.');
-    end;
-    SigmaDist(:,:,s) = rsa_varianceLDC(zeros(1,numDist),C,S,numPart,numVox(s));
-end;
+Z = indicatorMatrix('identity_p',conditionVec);
+X = indicatorMatrix('identity_p',partitionVec); 
 
-% Simple linear component model
+% Build the variance-components 
+for r=1:numReg
+    D=rsa.rdm.squareRDM(Model.RDM(r,:)); 
+    
+
+end; 
+
+
 if (Model.numNonlin==0)
     X=permute(Model.RDM,[2 1 3]);
     numReg = size(X,2);

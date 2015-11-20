@@ -15,8 +15,9 @@ volumenames = {'/Volumes/HD-PEBU2/Windows/myBackup/ICN/',...
     'H:/Dropbox/work/UK/Research/',...
     '/Users/joern/Projects'};%
 
-baseDir         = '/Users/joern/Projects/sh1';   % For Joern
-% baseDir         = '/Volumes/DATA/MotorControl/data/SequenceLearning/sh1';   % For AY
+%baseDir         = '/Users/joern/Projects/sh1';   % For Joern
+baseDir         = '/Volumes/DATA/MotorControl/data/SequenceLearning/sh1';   % For AY
+%baseDir         = '/Users/Atsushi/Dropbox/work/UK/Research/MotorControl/data/SequenceLearning/sh1';   % For AY 2
 
 fieldmapsDir    = fullfile(baseDir, 'fieldmaps');
 behaviourDir    = fullfile(baseDir, 'data');
@@ -139,20 +140,22 @@ varargout = {};
 CAT.facecolor   = {[0 0 0.7],[0.3 0.3 1],[0.7 0 0],[1 0.6 0.6]}; %[1 0.1 0.1],
 CAT.fillcolor   = CAT.facecolor;
 CAT.linecolor   = CAT.facecolor;
+CAT.edgecolor   = CAT.facecolor;
+CAT.capwidth    = 0.01;
 CAT.markertype  = {'o'};
 CAT.markersize  = {8};
 CAT.markercolor = CAT.fillcolor;
 CAT.markerfill  = {[1 1 1]};
 CAT.gapwidth    = {[0.2 0.2 0.2 0.2]};
-CAT.linewidth   = {1.5};
-CAT.errorwidth  = {1.5};
+CAT.linewidth   = {1};
+CAT.errorwidth  = {1};
 CAT.errorcolor  = {[0 0 0]};
 
 omega_names = {'One-digit','Two-digit','Chunk','Sequence'};
 
 %% Main operation
 switch(what)
-    case 'ROI_distraw'  % Extracts ROI data and calculates distances
+    case 'ROI_distraw'                                                      % Extracts ROI data and calculates distances
         T=[];
         sn = varargin{1};
         chunkset = 'A';
@@ -229,12 +232,103 @@ switch(what)
         end;
         varargout={T};
         save(fullfile(regDir,'distances_sepPerm.mat'),'-struct','T');
-    case 'searchlight_distraw'         % **new** Calc G and pattern distance (prewhiten data using covariance matrix estimated from raw time series data)
+    case 'ROI_distraw_effVox_subspace'                 % Extracts ROI data and calculates distances
+        T=[];
+        sn = varargin{1};
+        numVox_subspace = 160;
+        Niter = 100;
+        glm = 3;
+        ROI = 'all';
+        fname 	= 'movement';       % using metric file which compares any movement against rest
+        regions = 1:12;
+        hemi = 1:2;
+        vararginoptions({varargin{2:end}},{'chunkset','glm','ROI','fname','regions','hemi'});
+        
+        for s=sn
+            fprintf('subj = %d\n',s)
+            
+            % load SPM.mat
+            glmDirSubj=fullfile(baseDir,glmName{glm},subj_name{s});
+            load(fullfile(glmDirSubj,'SPM.mat'));
+            SPM = spmj_move_rawdata(SPM,fullfile(baseDir,'imaging_data',subj_name{s},'sess1'));
+            
+            % choose ROI
+            switch (ROI)
+                case 'func'
+                    load(fullfile(regDir,subj_name{s},[subj_name{s} sprintf('_reg800_%s_1.mat',fname)]));
+                case 'all'
+                    load(fullfile(regDir,subj_name{s},[subj_name{s} sprintf('_regAll_%s_1.mat',fname)]));
+            end
+            
+            % Get design
+            E = load(fullfile(glmDirSubj,'SPM_info.mat'));
+            E = getrow(E,E.run<11);
+            
+            % Now get prewhitened betas from these regions
+            NRegions = numel(regions)*numel(hemi);
+            nRegions = numel(R);
+            for reg = regions
+                for hem = hemi
+                    if reg<9
+                        roi = numregions_surf*(hem-1)+reg;
+                    elseif reg>=9
+                        roi = 2*numregions_surf + numregions_BG*(hem-1)+(reg-8);
+                    end
+                    if (nRegions<NRegions)
+                        warning('number of ROIs doesn''t much!');
+                        break;
+                    end
+                    if (~isempty(R{roi}))
+                        fprintf('extracting: %s ...',R{roi}.name);
+                        
+                        % get data
+                        data = region_getdata(SPM.xY.VY,R{roi});
+                        numVox = size(R{roi}.data,1);
+                        % cut out NaN or all-zero voxels
+                        idx = sum(data.*data,1)==0;
+                        if sum(idx)==0
+                            fprintf('... done (%d voxels)\n',numVox);
+                        else
+                            fprintf('... done (%d voxels, %d were discarded since containing no data)\n',P,sum(idx));
+                        end
+                        data = data(:,~idx);
+                        numVox = size(data,2);
+                        
+                        % apply random subspace method
+                        if numVox<numVox_subspace
+                            index = randperm(numVox,numVox);
+                        else                            
+                            index = randperm(numVox,numVox_subspace);
+                        end
+                        for i = Niter
+                            % get the distances
+                            [S.RDM,Sw,S.effVox,S.trSS]=rsa_distanceLDCsepPerm(data(:,index),SPM,E.seqType);
+                            S.Sigma  = Sw(:)';
+                            S.region = reg;
+                            S.subj  = s;
+                            S.hemis = hem;
+                            S.numVox = numVox_subspace;
+                            S.iter = i;
+                            
+                            T=addstruct(T,S);
+                            
+                            if numVox<numVox_subspace
+                                S.numVox = numVox;
+                                break;
+                            end
+                        end
+                    end;
+                end;
+            end;
+        end;
+        varargout={T};
+        save(fullfile(regDir,'distances_sepPerm_subspace.mat'),'-struct','T');
+    case 'searchlight_distraw'                                              % Calc distance, sigma, effective no. of voxesl from time series data
         sn              = varargin{1};
-        glm=3;
+        glm=3; 
         numSigma 		= nSequence^2; % length of G matrix
         numDist= nSequence*(nSequence-1)/2; % length of distance
-        suffix=[];
+        suffix=[]; 
         
         home = cd;
         for s = sn
@@ -270,8 +364,35 @@ switch(what)
             % run searchlight analysis
             lmva_spm(SL,SPM.xY.P,nii_out,@sh1_calcDistancePerm,'params',params,'isNP',1);
         end % s
+    case 'searchlight_fit_EB_lin'
+        sn = varargin{1};
+        method = 'ZellnerIndivid';
+        hemi = [1 2];
+        %logtau = [-6.18 -0.243 -0.898 1];
+        %logtau = [-10 2.0217 2.0217 0]; % estimated from behaviour (error rate)
+        reguse = [1 2 4 6];
+        glm =3;
+        vararginoptions(varargin(2:end),{'method','hemi','logtau','reguse'});                
         
-    case 'ROI_reliability_btw' % Calculate between subject reliability of RDMs
+        Model = sh1_getRDMmodelTau1(logtau,chunk_set(sn),reguse,'normSqEuclidean');
+        Model.numNonlin = 0;
+        Model.prior = method;
+        for h=hemi
+            for s=1:length(sn)
+                distFiles{s}=fullfile(baseDir,glmName{glm},subj_name{sn(s)},sprintf('%s_dist_raw.nii',subj_name{sn(s)}));
+                sigmFiles{s}=fullfile(baseDir,glmName{glm},subj_name{sn(s)},sprintf('%s_sigma_raw.nii',subj_name{sn(s)}));
+                nvoxFiles{s}=fullfile(baseDir,glmName{glm},subj_name{sn(s)},sprintf('%seffVox.nii',subj_name{sn(s)}));
+                whiteFiles{s}=fullfile(caretDir,['x' subj_name{sn(s)}],hemName{h},[hem{h} '.WHITE.coord']);
+                pialFiles{s}=fullfile(caretDir,['x' subj_name{sn(s)}], hemName{h},[hem{h} '.PIAL.coord']);
+            end;
+            for i=1:4
+                outFiles{i}=fullfile(caretDir,'fsaverage_sym', hemName{h},sprintf('%s.%sOmega%d.metric',hem{h},method,reguse(i)));
+            end;
+            outFiles{5}= fullfile(caretDir,'fsaverage_sym', hemName{h},sprintf('%s.%sNumSubj.metric',hem{h},method));
+            rsa_fitModelSurfEB(Model,distFiles,sigmFiles,9,nvoxFiles,whiteFiles,pialFiles,outFiles);
+        end;
+            
+    case 'ROI_reliability_btw'                                              % Calculate between subject reliability of RDMs
         
         useallRDM = 0; % remove non-shared sequences or not
         glm = [3];
@@ -298,32 +419,32 @@ switch(what)
                             rdm_all     = getCommon(rdm_all,[3 5 7]);
                             rdm_all_    = getCommon(rdm_all_,[3 5 7]);
                         end
-                        
+                                                
                         subj = unique(D.subj);
                         for s=1:numel(subj)
                             idx = D.subj==subj(s);
                             
                             rdm = D.RDM(idx,:);
                             rdm_loo = nanmean(D.RDM(~idx,:),1); % leave-one-subject-out rdm
-                            
+                                                        
                             if useallRDM==0
-                                % we must choose only the distance between physically identical sequences here
+                                % we must choose only the distance between physically identical sequences here                                
                                 rdm      = getCommon(rdm,[3 5 7]);
-                                rdm_loo  = getCommon(rdm_loo,[3 5 7]);
+                                rdm_loo  = getCommon(rdm_loo,[3 5 7]);                                
                             end
                             
                             % visualise RDMs
                             Tmp.RDM = [rdm_all;rdm_loo;rdm_all_;rdm];
                             Tmp.name = {sprintf('avrgRDM (%s)',chunksets{chunkset});...
-                                sprintf('avrgRDM w.o. subj:%s (%s)',subj_name{subj(s)},chunksets{chunkset});...
-                                sprintf('avrgRDM (%s)',chunksets{3-chunkset});...
-                                sprintf('RDM of subj:%s (%s)',subj_name{subj(s)},chunksets{chunkset})};
+                                        sprintf('avrgRDM w.o. subj:%s (%s)',subj_name{subj(s)},chunksets{chunkset});...
+                                        sprintf('avrgRDM (%s)',chunksets{3-chunkset});...
+                                        sprintf('RDM of subj:%s (%s)',subj_name{subj(s)},chunksets{chunkset})};
                             %rsa.fig.imageRDMs(Tmp);pause(0.005);title(sprintf('ROI=%s',regname{reg}))
-                            
+                                    
                             R.within_u          = corr(rdm',rdm_all','type','Pearson'); % upper bound
-                            R.within_l          = corr(rdm',rdm_loo','type','Pearson'); % lower bound
-                            R.across            = corr(rdm',rdm_all_','type','Pearson'); % across chunk set corr
-                            
+                            R.within_l          = corr(rdm',rdm_loo','type','Pearson'); % lower bound                            
+                            R.across            = corr(rdm',rdm_all_','type','Pearson'); % across chunk set corr                                                                                    
+                                                        
                             R.subj      = subj(s);
                             R.chunkset  = chunkset;
                             R.region    = reg;
@@ -340,29 +461,30 @@ switch(what)
         % get Fisher-z-transformed version of C
         Z = C;
         Z.within_u = fisherz(Z.within_u);
-        Z.within_l = fisherz(Z.within_l);
+        Z.within_l = fisherz(Z.within_l);        
         Z.across   = fisherz(Z.across);
         
         for g=glm
             %figure('name',sprintf('reliability (glm=%d)',glm));
-            %             D = getrow(Z,Z.glm==g&Z.chunkset==1);
-            %             sh1_rsa('plot_reliability_btw',D);
-            %
-            %             D = getrow(Z,Z.glm==g&Z.chunkset==2);
-            %             sh1_rsa('plot_reliability_btw',D);
+%             D = getrow(Z,Z.glm==g&Z.chunkset==1);
+%             sh1_rsa('plot_reliability_btw',D);
+%             
+%             D = getrow(Z,Z.glm==g&Z.chunkset==2);
+%             sh1_rsa('plot_reliability_btw',D);
             
             D = getrow(Z,Z.glm==g);
             sh1_rsa('plot_reliability_btw',D);
         end
         
         varargout = {C};
-    case 'ROI_btwchunkset_corr' % Calculate between subject reliability of RDMs
+    case 'ROI_btwchunkset_corr'                                             % Calculate between subject reliability of RDMs
         
         useallRDM = 0; % remove non-shared sequences or not
         glm = [3];
         removeSeq = [3 5 7];
-        corrfun = 'corrN';
-        vararginoptions(varargin,{'useallRDM','glm','corrfun','removeSeq'});
+        corrfun = 'Pearson';
+        ztransform = 1;
+        vararginoptions(varargin,{'useallRDM','glm','corrfun','removeSeq','ztransform'});
         
         % get model rdm for chunk
         MA = sh1_getRDMmodelTau1(10,1,4,'sqEuclidean'); MA.name{1} = 'chunk-setA';
@@ -377,14 +499,14 @@ switch(what)
             otherwise
                 Corr_model = corr(MA.RDM',MB.RDM','type',corrfun);
         end
-        figure(1); rsa.fig.imageRDMs(addstruct(MA,MB));
+        figure(1); rsa.fig.imageRDMs(addstruct(MA,MB));        
         fprintf('Correlation between chunk RDM for set A and B (%s) : %1.2f\n',corrfun,Corr_model);
-        
+            
         G = []; All=[];
         for g = glm
             % load data set
             T = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',g)));
-            
+                        
             for reg = [1:8]
                 for h = [1 2]
                     D = getrow(T,T.region==reg&T.hemis==h);
@@ -407,67 +529,185 @@ switch(what)
                     % get corelation matrix
                     switch corrfun
                         case 'corrN'
-                            Ctmp = real(corrN(D.RDM'));
+                            Ctmp = real(corrN(D.RDM',D.RDM'));
                         otherwise
                             Ctmp = corr(D.RDM','type',corrfun);
                     end
+                    Ctmp(diagonal) = NaN;
+                    if ztransform==1
+                        Ctmp = fisherz(Ctmp);
+                    end
+
+                    % apply mask (df is the number of subjects)                    
+                    Wtmp = Ctmp;
+                    Wtmp(idxBetween) = NaN;
+                    Btmp = Ctmp;
+                    Btmp(idxWithin) = NaN;
                     
-                    % vectorise and give indicator
-                    R.r = Ctmp(tril(idxAll));
-                    R.z = fisherz(R.r);
-                    R.type(idxWithin(tril(idxAll)),1) = 1;
-                    R.type(idxBetween(tril(idxAll)),1) = 2;
-                    R.SN = [1:length(R.r)]';
-                    R.region = repmat(reg,size(R.r));
-                    R.hemis = repmat(h,size(R.r));
-                    R.glm = repmat(g,size(R.r));
+                    
+                    
+%                     % vectorise and give indicator
+%                     R.r = Ctmp(tril(idxAll));
+%                     R.z = fisherz(R.r);
+%                     R.type(idxWithin(tril(idxAll)),1) = 1;
+%                     R.type(idxBetween(tril(idxAll)),1) = 2;
+
+                    R.corr = [nanmean(Wtmp,2);nanmean(Btmp,2)];
+                    R.type = [ones(size(Wtmp,1),1);2*ones(size(Wtmp,1),1)];
+                    R.subj = [D.subj;D.subj];
+                    R.region = repmat(reg,size(R.corr));
+                    R.hemis = repmat(h,size(R.corr));
+                    R.glm = repmat(g,size(R.corr));
                     
                     All = addstruct(All,R);
-                    
-                    % apply mask
-                    %                     Corr.Rwithin    = Ctmp(tril(idxWithin))';
-                    %                     Corr.Rbetween   = Ctmp(tril(idxBetween))';
-                    %                     Corr.Zwithin    = fisherz(Corr.Rwithin);
-                    %                     Corr.Zbetween   = fisherz(Corr.Rbetween);
-                    %                     Corr.region     = reg;
-                    %                     Corr.hemis      = h;
-                    %                     Corr.glm        = g;
-                    %
-                    %                     G = addstruct(G,Corr);
+
                 end
             end
         end
+        % ttest
+        S = [];
+        for r=unique(All.region)'
+            for h=unique(All.hemis)'
+                fprintf('paired t-test (%s-%s)\n',regname{r},hemName{h})
+                subsetW = All.region==r&All.hemis==h&All.type==1;
+                subsetB = All.region==r&All.hemis==h&All.type==2;
+                [t,p] = ttest_mc(All.corr(subsetW),All.corr(subsetB),1,'paired');
+                fprintf('t(%d) = %2.3f (p = %2.4f)\n---\n',numel(unique(All.subj))-1,t,p);
+                
+                sta.t=t;
+                sta.p=p;
+                sta.region = r;
+                sta.hemis = h;
+                
+                S = addstruct(S,sta);
+            end
+        end
+        
         
         figure;
-        subplot(2,1,1);barplot([All.hemis All.region],All.z,'split',All.type,...
-            'leg',{'within','between'},'leglocation','northeast');
+        subplot(2,1,1);barplot([All.hemis All.region],All.corr,'split',All.type,...
+            'leg',{'within','between'},'leglocation','northeast','gapwidth',[2 0.5 0.2]);
         ylabel(sprintf('z-transformed correlation (%s)',corrfun),'fontsize',13);
-        % set(gca,'ylim',[-0.1 0.8])
+        xlabel('ROI','fontsize',13);
+        set(gca,'ylim',[-0.1 0.5])
+        
+        subplot(2,1,2);barplot([S.hemis,S.region],log10(S.p),'gapwidth',[2 0.5 0.2]);
+        ylabel('log(p) (one-sided paired-ttest)','fontsize',13);
+        xlabel('ROI','fontsize',13);
+        drawline([log10(0.001) log10(0.01) log10(0.05) log10(0.1)],'dir','horiz','color',[1 0 0])
+        set(gca,'ylim',[-2 0],'ytick',[log10(0.001) log10(0.01) log10(0.05) log10(0.1)])
+        
         
         varargout = {All};
+    case 'ROI_fit_model_noise_ceiling'                                      % Calculate noise ceiling with linear model
+        method = 'GLS';
+        glm = 3;
+        vararginoptions(varargin,{'method','ceiling','glm'}); 
         
-    case 'fit_model_EB_lin'
-        method = 'ZellnerIndivid'; 
-        vararginoptions(varargin,{'method'}); 
-
+        % load data set
+        T = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm)));
         
-        T=load(fullfile(regDir,'distances_sepPerm.mat'));
         T.chunk_set = chunk_set(T.subj)'; 
         regions=unique(T.region);
+        T.ceiling = NaN(size(T.subj)); % col-1: upper bound, col-2: lower bound        
         
-        % Seperate models for the two chunk sets 
-        Mod(1) = sh1_getRDMmodelTau1([-6.18 -0.243 -0.898 1],1,[1 2 4 6],'normSqEuclidean'); 
-        Mod(2) = sh1_getRDMmodelTau1([-6.18 -0.243 -0.898 1],2,[1 2 4 6],'normSqEuclidean'); 
-        Mod(1).numNonlin = 0;   
-        Mod(2).numNonlin = 0;   
-
         for r=regions'
             for h=[1 2]
                 % Get the data to be fitted 
                 indx = find(T.region==r & T.hemis==h);
 
                 % Generate the model for all subject you are fitting 
-                Model = sh1_getRDMmodelTau1([-6.18 -0.243 -0.898 1],chunk_set(T.subj(indx)),[1 2 4 6],'normSqEuclidean'); 
+                for c = [1 2]
+                    % for upper bound
+                    dist    = getrow(T,T.region==r&T.hemis==h&T.chunk_set==c);
+                    Xu      = nanmean(dist.RDM,1);
+                    Xu      = Xu / sqrt(sum(Xu.*Xu));
+                    Upper(c).RDM = Xu;
+                    % for lower bound
+                    for s = 1:length(dist.subj)
+                        idx    = true(size(dist.subj));
+                        idx(s) = false;
+                        Xl     = nanmean(dist.RDM(idx,:),1);
+                        Xl     = Xl / sqrt(sum(Xl.*Xl));
+                        Lower(c,s).RDM = Xl;
+                    end                    
+                end
+                
+                % Assemble the design matrices 
+                for s=1:length(indx)
+                    Sigma(:,:,s)=reshape(T.Sigma(indx(s),:),8,8);
+                end;
+
+                % Do the fit
+                switch(method)
+                    case 'OLS'
+                        for i=1:2 
+                            dist = getrow(T,T.region==r&T.hemis==h&T.chunk_set==i);                            
+                            for s = 1:length(dist.subj)                                
+                                idx = find(T.chunk_set==i&T.region==r&T.hemis==h&T.subj==dist.subj(s));
+                                T.ceiling(idx,1) = rsa_fitModelOLS(Upper(i),T.RDM(idx,:)); 
+                                T.ceiling(idx,2) = rsa_fitModelOLS(Lower(i,s),T.RDM(idx,:)); 
+                            end
+                        end; 
+                    case 'GLS' 
+                        for i=1:2 
+                            dist = getrow(T,T.region==r&T.hemis==h&T.chunk_set==i);
+                            for s = 1:length(dist.subj)                                
+                                idx = find(T.chunk_set==i&T.region==r&T.hemis==h&T.subj==dist.subj(s));
+                                T.ceiling(idx,1) = rsa_fitModelGLS(Upper(i),T.RDM(idx,:),T.Sigma(idx,:),9,T.effVox(idx,1));
+                                T.ceiling(idx,2) = rsa_fitModelGLS(Lower(i,s),T.RDM(idx,:),T.Sigma(idx,:),9,T.effVox(idx,1));
+                            end                                                        
+                        end; 
+                    case 'IRLS' 
+                        for i=1:2 
+                            dist = getrow(T,T.region==r&T.hemis==h&T.chunk_set==i);
+                            for s = 1:length(dist.subj)                                
+                                idx = find(T.chunk_set==i&T.region==r&T.hemis==h&T.subj==dist.subj(s));
+                                T.ceiling(idx,1) = rsa_fitModelIRLS(Upper(i),T.RDM(idx,:),T.Sigma(idx,:),9,T.effVox(idx,1));
+                                T.ceiling(idx,2) = rsa_fitModelIRLS(Lower(i,s),T.RDM(idx,:),T.Sigma(idx,:),9,T.effVox(idx,1));
+                            end                            
+                        end;
+                end; 
+            end;
+        end;
+        subplot(2,1,1); 
+        barplot(T.region,[T.ceiling],'subset',T.hemis==1); 
+        subplot(2,1,2); 
+        barplot(T.region,[T.ceiling],'subset',T.hemis==2); 
+        set(gcf,'Name',method); 
+        T.method = repmat({method},size(T.subj));
+        varargout={T};    
+        
+    case 'fit_model_EB_lin'
+        method = 'ZellnerIndivid'; 
+        %logtau = [-10 2.0217 2.0217 0]; % estimated from behaviour (error rate)
+        logtau = [-6.265 -0.243 -0.898 1]; % estimated by EB nonlin
+        ceiling = 1;
+        glm = 3;
+        sn = [2:6,8,10:15];
+        regions = [1:8];
+        vararginoptions(varargin,{'method','logtau','ceiling','glm','sn','regions'}); 
+        
+        % load data set
+        T = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm)));
+        T.chunk_set = chunk_set(T.subj)'; 
+        %regions=unique(T.region);
+        
+        T = getrow(T,ismember(T.subj,sn));
+        
+        % Seperate models for the two chunk sets 
+        Mod(1) = sh1_getRDMmodelTau1(logtau,1,[1 2 4 6],'normSqEuclidean'); 
+        Mod(2) = sh1_getRDMmodelTau1(logtau,2,[1 2 4 6],'normSqEuclidean'); 
+        Mod(1).numNonlin = 0;   
+        Mod(2).numNonlin = 0;   
+
+        for r=regions
+            for h=[1 2]
+                % Get the data to be fitted 
+                indx = find(T.region==r & T.hemis==h);
+
+                % Generate the model for all subject you are fitting 
+                Model = sh1_getRDMmodelTau1(logtau,chunk_set(T.subj(indx)),[1 2 4 6],'normSqEuclidean'); 
                 Model.numNonlin = 0;   
 
                 % Assemble the design matrices 
@@ -480,7 +720,7 @@ switch(what)
                     case 'OLS'
                         for i=1:2 
                             indx = find(T.chunk_set==i & T.region==r & T.hemis==h);
-                            T.omega(indx,:)=rsa.stat.fitModelOLS(Mod(i),T.RDM(indx,:)); 
+                            T.omega(indx,:)=rsa_fitModelOLS(Mod(i),T.RDM(indx,:)); 
                         end; 
                     case 'GLS' 
                         for i=1:2 
@@ -500,11 +740,19 @@ switch(what)
                 end; 
             end;
         end;
-        subplot(2,1,1); 
-        barplot(T.region,T.omega,'subset',T.hemis==1); 
-        subplot(2,1,2); 
-        barplot(T.region,T.omega,'subset',T.hemis==2); 
-        set(gcf,'Name',method); 
+        
+        C = [];
+        if ceiling==1
+            C = sh1_rsa('ROI_fit_model_noise_ceiling','glm',glm,'method','GLS');
+        end
+        T.method = repmat({method},size(T.subj));
+                
+        sh1_rsa('plot_omega_new',T,'ceiling',C);
+        
+        % summary logEvidence
+        pivottable(T.region,T.hemis,T.logEvidence,'nanmean');
+        fprintf('total logEvidence: %2.3f\n',sum(T.logEvidence));
+        
         varargout={T};
     case 'fit_model_EB_nonlin'
         glm = 1;
@@ -686,7 +934,7 @@ switch(what)
         
         
         varargout={TT,mRDM};
-    case 'fit_model_EB_nonlin_singlemodel' % fit single model to compare log-evidence from multiple starting points
+    case 'fit_model_EB_nonlin_singlemodel'                                  % fit single model to compare log-evidence from multiple starting points
         glm = 3;
         useolddata = 0;
         modelTerms = [1 2 4 6];
@@ -694,8 +942,9 @@ switch(what)
         Niter = 4;
         regions = [1 2 3 4 5 7 8];
         hemi = [1 ];
+        sn = [2:15];
         
-        vararginoptions(varargin(:),{'glm','useolddata','modelTerms','nonlinP0','Niter','regions','hemi'})
+        vararginoptions(varargin(:),{'glm','useolddata','modelTerms','nonlinP0','Niter','regions','hemi','sn'})
         
         % load data set
         if useolddata
@@ -706,6 +955,8 @@ switch(what)
         else
             T       = load(fullfile(regDir,sprintf('distances_sepPerm.glm%d.mat',glm)));
         end
+        
+        T = getrow(T,ismember(T.subj,sn));
         
         B=[];
         
@@ -870,19 +1121,20 @@ switch(what)
         sh1_rsa('plot_prior',T);
         sh1_rsa('plot_tau',T);
         varargout={T,mRDM};
-    case 'fit_model_family_singlemodel' % fit single model
+    case 'fit_model_family_singlemodel'                                     % fit single model
         glm         = 3;
         logtaus     = [-1.5:0.3:1.5]; % parameter which determines the number of model families
         regions     = [2];
         hemi        = [1];
-        vararginoptions(varargin(:),{'glm', 'logtaus','regions','hemi'});
+        modelTerms  = [2 4];
+        vararginoptions(varargin(:),{'glm', 'logtaus','regions','hemi','modelTerms'});
         
         % Get model family
-        [ModelFamily, idx]  = sh1_getRDMTau('getfamily','logtaus',logtaus,'modelTerms',[2 4],'chunkset',[1 2]);
+        [ModelFamily, idx]  = sh1_getRDMTau('getfamily','logtaus',logtaus,'modelTerms',modelTerms,'chunkset',[1 2]);
         ModelFamily.prior   = 'Ridge';%'Zellner';
-        ModelFamily.X       = ModelFamily.RDM;
+        ModelFamily.X       = ModelFamily.RDM;        
         ModelFamily.Nmodel  = size(ModelFamily.X,1);
-        ModelFamily.numComp = size(ModelFamily.X,1);
+        ModelFamily.numComp = size(ModelFamily.X,1);        
         ModelFamily.idx     = idx;
         ModelFamily.numPrior = size(ModelFamily.RDM,1);
         
@@ -895,10 +1147,10 @@ switch(what)
         T.logEvidence = T.omega_hat;
         T.logtheta = T.omega_hat;
         
-        %regions=unique(T.region);
+        %regions=unique(T.region);        
         for r = regions
             fprintf('Estimating ROI distance %s...\n',regname{r});
-            for h = hemi
+            for h = hemi                                                
                 indx = find(T.region==r & T.hemis==h);
                 D = getrow(T,indx);
                 numSubj = length(unique(D.subj));
@@ -910,11 +1162,12 @@ switch(what)
                 F = ModelFamily;
                 F.X = X;
                 
-                % get logEvidence for null model
+                % get logEvidence for null model                 
                 logEvidence0 = rsa.stat.fitModelNull(D.RDM,sig,9,D.effVox);
-                
+                                
                 % fit single model from model families
                 for m = 1:ModelFamily.Nmodel
+                    fprintf('   - Fitting model %s...',F.name{m})
                     F.X = X(m,:,:);
                     %F.X = F.X/sqrt(mean(F.X.^2));
                     
@@ -927,33 +1180,36 @@ switch(what)
                     % post-process of omega to adjust by mean of regressor
                     normX = squeeze(sqrt(mean(F.X.^2,2)));
                     T.omega_hatn(indx,m) = bsxfun(@times,T.omega_hat(indx,m),normX);
-                    
+                    fprintf('... done\n')
                 end
                 
                 % adjust by logEvidence0
                 T.logEvidence(indx,:) = T.logEvidence(indx,:)-repmat(logEvidence0,1,F.numComp); % difference from null model
                 
+            end            
+        end
+                
+        for r=[7 8]
+            for s=[2:15]
+            subset = T.region==r&T.subj==s;
+            
+                figure('name',[what,'-',regname{r}]);
+                subplot(1,2,1)
+                barplot([],T.logEvidence(:,F.idx'),'barwidth',0.8,'subset',subset&T.hemis==1);
+                set(gca,'xticklabel',ModelFamily.name(ModelFamily.idx),'view',[270 90],'fontsize',12);
+                ylabel('logEvidence','fontsize',12);
+                title(sprintf('%s-%s',regname{r},hemName{1}),'fontsize',13)
+                
+                subplot(1,2,2)
+                barplot([],T.logEvidence(:,F.idx'),'barwidth',0.8,'subset',subset&T.hemis==2);
+                set(gca,'xticklabel',ModelFamily.name(ModelFamily.idx),'view',[90 270],'fontsize',12);
+                ylabel('logEvidence','fontsize',12);
+                title(sprintf('%s-%s',regname{r},hemName{2}),'fontsize',13)
             end
         end
-        
-        for r=regions
-            
-            figure('name',[what,'-',regname{r}]);
-            subplot(1,2,1)
-            barplot([],T.logEvidence(:,F.idx'),'barwidth',0.8,'subset',T.region==r&T.hemis==1);
-            set(gca,'xticklabel',ModelFamily.name(ModelFamily.idx),'view',[270 90],'fontsize',12);
-            ylabel('logEvidence','fontsize',12);
-            title(sprintf('%s-%s',regname{r},hemName{1}),'fontsize',13)
-            
-            subplot(1,2,2)
-            barplot([],T.logEvidence(:,F.idx'),'barwidth',0.8,'subset',T.region==r&T.hemis==2);
-            set(gca,'xticklabel',ModelFamily.name(ModelFamily.idx),'view',[90 270],'fontsize',12);
-            ylabel('logEvidence','fontsize',12);
-            title(sprintf('%s-%s',regname{r},hemName{2}),'fontsize',13)
-            
-        end
-        
+                        
         varargout = {T};
+    
     case 'plot_omega'
         T=varargin{1};
         
@@ -1028,11 +1284,11 @@ switch(what)
             imagesc_rectangle([mean(Ldata.logtheta(:,1:4),1),mean(Rdata.logtheta(:,1:4),1)],...
                 'scale',[-scale, scale]);
         end
-    case 'plot_reliability_btw' % plot between subject reliabitliy of RDM
+    case 'plot_reliability_btw'                                             % plot between subject reliabitliy of RDM
         C = varargin{1};
         region = [1:8];
         barwidth = 0.8;
-        
+                        
         Nsubj = length(unique(C.subj));
         col   = jet(Nsubj);
         for i=1:Nsubj
@@ -1054,13 +1310,13 @@ switch(what)
                 
                 % bar to get xpos
                 xpos = barplot([],[C.within_l,C.across],'subset',subset,'barwidth',barwidth); hold off
-                
+                                
                 % ttest
                 [t.tval, t.p] = ttest_mc(C.within_l,C.across,1,'paired','subset',subset);
                 
                 % ranksum test
                 [t.prank] = ranksum(C.within_l(subset,:),C.across(subset,:),'tail','both','method','exact');
-                
+               
                 % drawlines
                 drawline(0,'dir','horz','lim',[xpos(1)-barwidth,xpos(2)+barwidth]); hold on
                 drawline(upperbound,'dir','horz','color',[1 0.5 0.5],'lim',...
@@ -1113,8 +1369,120 @@ switch(what)
         title('p-value by ranksum test')
         
         varargout = {T};
+    case 'plot_omega_new'
         
+        T = varargin{1};
+        ceiling = [];
+        doSQRT  = 1; 
+        regions = [1 2 3 4 5 6 7 8 9 10 11 12];
+        reguse = [1 2 4 6];
+          
+        vararginoptions(varargin(2:end),{'ceiling','doSQRT','regions','reguse'});
         
+        if ~isempty(ceiling)
+            if doSQRT==1
+                C = ssqrt(ceiling.ceiling);
+            else
+                C = ceiling.ceiling;
+            end
+        end
+        
+        % ylim setting
+        data = T.omega;
+        if (doSQRT) 
+            D = ssqrt(data); 
+            ylim1 = ssqrt([-1.5 30]*0.001); 
+            ylim2 = ssqrt([-1.5 30]*0.001); 
+            ylim3 = ssqrt([-1.5 30]*0.001); 
+        else 
+            D = data;
+            ylim1 = [-1.5 30]*0.001; 
+            ylim2 = [-1.5 30]*0.001;
+            ylim3 = [-1.5 30]*0.001; 
+        end;
+        
+        Stats = [];
+        % plot
+        barwidth = 0.75;
+        figure('name',sprintf('EB lin regress (%s)',T.method{1}),'position',[50 50 900/sqrt(2)*0.8 700],'color','w')
+        plots = 1;
+        for r = 1:length(regions) 
+            if ((plots>8))
+                figure('name',sprintf('EB lin regress (%s)',T.method{1}),'position',[50 50 900/sqrt(2)*0.8 700],'color','w')
+                plots = 1;
+            end
+            subplot(4,2,plots); 
+            plots=plots+1;
+                        
+            CAT.edgecolor = [1 1 1];
+            [x,y,err] = barplot(T.hemis,D,'subset',T.region==regions(r),...
+                'CAT',CAT,'barwidth',barwidth); hold on;
+            
+            midpoint = x(numel(reguse)) + (x(numel(reguse)+1)-x(numel(reguse)))/2;
+            
+            % draw noise ceiling if passed
+            if ~isempty(ceiling)
+                tmpL = nanmean(C(T.region==regions(r)&T.hemis==1,:),1); % LH
+                h=fill([x(1)-barwidth/2 x(4)+barwidth/2 x(4)+barwidth/2 x(1)-barwidth/2],...
+                    [tmpL(2) tmpL(2) tmpL(1) tmpL(1)],[0.8 0.8 0.8]); hold on                
+                %set(h,'edgecolor','non','facealpha',0.5);
+                tmpR = nanmean(C(T.region==regions(r)&T.hemis==2,:),1); % RH
+                h=fill([x(5)-barwidth/2 x(8)+barwidth/2 x(8)+barwidth/2 x(5)-barwidth/2],...
+                    [tmpR(2) tmpR(2) tmpR(1) tmpR(1)],[0.8 0.8 0.8]); hold on
+                %set(h,'edgecolor','non','facealpha',0.5);
+            end
+            ylim1(2) = 0.28;%max([tmpL,tmpR]);
+            ylim2(2) = 0.28;%max([tmpL,tmpR]);
+            ylim3(2) = 0.1;%max([tmpL,tmpR]);
+            
+            
+            title(sprintf('LH<-%s->RH',regname{regions(r)}),'fontsize',15);
+            ylabel('Regression weight','fontsize',15)
+            set(gca,'xlim',[x(1)-1, x(end)+1],'XTicklabel',{},'fontsize',15);
+            set(gca,'fontsize',15,'tickdir','out','ticklength',[0.025 0.025])
+                
+            % choosing ylim
+            if (r<3) 
+                set(gca,'YLim',ylim1); 
+                drawline(midpoint, 'dir','vert','linestyle','--','lim',ylim1);
+            elseif r>8
+                set(gca,'YLim',ylim3); 
+                drawline(midpoint, 'dir','vert','linestyle','--','lim',ylim3);
+            else 
+                set(gca,'YLim',ylim2); 
+                drawline(midpoint, 'dir','vert','linestyle','--','lim',ylim2);
+            end;
+            set(gca,'ytick',[0 0.1 0.2 0.25 0.3]);
+            
+            % one-sample t-test
+            for s=1:2 
+                for co = 1:size(T.omega,2) 
+                    Y = pivottable(T.subj,[],D(:,co),'mean','subset',T.hemis==s & T.region==regions(r));
+                    [t,p] = ttest_mc(Y,[],1,'onesample'); 
+                    indx = co+(s-1)*length(reguse); 
+                    if (p<0.001)
+                        text(x(indx),y(indx)+1.5*err(indx),'***',...
+                            'HorizontalAlignment','center'); 
+                    elseif (p<0.05) 
+                        text(x(indx),y(indx)+1.5*err(indx),'*',...
+                            'HorizontalAlignment','center'); 
+                    end;
+                    
+                    stat.t = t;
+                    stat.df= numel(Y);
+                    stat.p = p;
+                    stat.region = r;
+                    stat.hemis = s;
+                    stat.omega = co;
+                    
+                    Stats = addstruct(Stats,stat);                    
+                end; 
+            end; 
+        end;     
+        
+        pivottable([Stats.region Stats.hemis],Stats.omega,Stats.p,'(x)');
+        
+        varargtout = {Stats};
     case 'showRDMs'
         T=varargin{1};
         glm=varargin{2};
@@ -1139,7 +1507,7 @@ function RDMout = getCommon(RDMin, seqnum);
 nSequence = 8;
 
 I = true(nSequence);
-I(diag(diag(I))) = false;
+I(diag(diag(I))) = false;     
 I(seqnum,:) = false;
 I(:,seqnum) = false;
 

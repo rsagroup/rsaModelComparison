@@ -139,7 +139,7 @@ for i=1:numComp
                 Model.dRDMdTheta(i,:,i,c) = sum(2*(Con*dPattern).*(Con*Pattern),2); % Fix: corrected derivative
             case 'normSqEuclidean'
                 Model.RDM(i,:,c)          = sum((Con*Pattern).^2,2)';
-                Model.RDM(i,:,c)          = bsxfun(@rdivide,Model.RDM(i,:,c),sqrt(mean(Model.RDM(i,:,c).^2)));
+                Model.RDM(i,:,c)          = bsxfun(@rdivide,Model.RDM(i,:,c),sqrt(sum(Model.RDM(i,:,c).^2)));
             otherwise
                 error('wrong parameter for distfun');
         end;

@@ -41,7 +41,7 @@ for s=1:numSubj
     
     % Precompute V0 and for the 
     XX   = X(:,:,s)'*X(:,:,s); 
-    W    = diag(exp(logtheta));
+    W    = diag(exp(real(logtheta)));
     XXiW = XX\W; 
     V0   = W*XXiW;    % Prior covariance of the regression coefficients
     S = Sigma(:,:,s) + X(:,:,s)*V0*X(:,:,s)' ;       % compute training set covariance matrix
