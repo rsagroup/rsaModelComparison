@@ -551,34 +551,152 @@ switch(what)
 
         % Get the predicted mean and variance of the crossvalidated distance
         Xi = C*Sig*C'; 
-        De = C*U*U'*C'; 
-        D.pMc  = diag(C*G*C')';
-        D.pVc  = {rsa_varianceLDC(G,C,D.eps,D.M,D.P)};
-        D.pVc1  = {1./(D.P.^2)*(4/D.M * De + 2*D.P/(D.M*(D.M-1))*Xi).*Xi};
-        D.pM  = diag(C*G*C')' + diag(Xi)'./D.M;
-        D.pV  = {1./(D.P.^2)*(4/D.M * De + 2*D.P/(D.M^2)*Xi).*Xi}; 
+        De = C*U*U'*C'/D.P; 
+
+        D.E = mean(T.D_hat); 
+        D.Ec = mean(T.D_hatc); 
+        V = cov(T.D_hat); 
+        D.V = V(:)'; 
+        Vc = cov(T.D_hatc);
+        D.Vc = Vc(:)'; 
+        V = cov(ssqrt(T.D_hat)); 
+        D.Vs = V(:)'; 
+        Vc = cov(ssqrt(T.D_hatc));
+        D.Vcs = Vc(:)'; 
+        
+        D.pEc  = diag(C*G*C')';
+        % pVc  = rsa_varianceLDC(G,C,D.eps,D.M,D.P)};
+        pVc  = 1./(D.P.^2)*(4*D.P/D.M * De + 2*D.P/(D.M*(D.M-1))*Xi).*Xi;
+        D.pVc = pVc(:)'; 
+        D.pE  = diag(C*G*C')' + diag(Xi)'./D.M;
+        pV  = 1./(D.P.^2)*(4*D.P/D.M * De + 2*D.P/(D.M^2)*Xi).*Xi; 
+        D.pV = pV(:)'; 
         varargout={D,T};
-    case 'Figure1'
-        label={'12','13','14','15','23','24','25','34','35','45'};
-        Var_a=[0 0.05 0.1 0.15 0.2];
+    case 'dist_covariance_sim'; 
+        Var_a=[0 0.05 0.1 0.15 0.2]*4;
         D=[];
         for i=1:length(Var_a);
             fprintf('%d\n',i);
-            [T,D]=rsa_testVarianceBasic('dist_covariance',...
-                'var_a',Var_a(i),'numSim',10000,'P',30,'M',5);
-            T.var12 = C{i}(1,1);
-            T.var23 = C{i}(5,5);
-            T.var45 = C{i}(10,10);
-            T.cov12_23 = C{i}(1,5);
-            T.cov12_45 = C{i}(1,10);
-            T.pVar12 = V{i}(1,1);
-            T.pVar23 = V{i}(5,5);
-            T.pVar45 = V{i}(10,10);
-            T.pCov12_23 = V{i}(1,5);
-            T.pCov12_45 = V{i}(1,10);
-            
+            [T]=rsa_testVarianceBasic('dist_covariance',...
+                'var_a',Var_a(i),'numSim',10000,'P',30,'M',5,'eps',2);
             D=addstruct(D,T);
         end;
+        varargout={D}; 
+    case 'Fig_histogram'; 
+        var_a=0;
+        eps = 2; 
+        catX = [-1:0.1:1.5];
+        vararginoptions(varargin,{'var_a','eps','catX'}); 
+        [D,T]=rsa_testVarianceBasic('dist_covariance',...
+                'var_a',var_a,'numSim',10000,'P',30,'M',5,'eps',eps);
+        subplot(4,1,1); 
+        histplot(T.D_hatc(:,1),'catX',catX);
+        set(gca,'XLim',[catX(1)-0.2 catX(end)+0.2]); 
+        
+        subplot(4,1,2); 
+        histplot(T.D_hat(:,1),'catX',catX);
+        set(gca,'XLim',[catX(1)-0.2 catX(end)+0.2]); 
+        
+        subplot(4,1,3); 
+        histplot(ssqrt(T.D_hatc(:,1)),'catX',catX);
+        set(gca,'XLim',[catX(1)-0.2 catX(end)+0.2]); 
+        
+        subplot(4,1,4); 
+        histplot(ssqrt(T.D_hat(:,1)),'catX',catX);
+        set(gca,'XLim',[catX(1)-0.2 catX(end)+0.2]); 
+        
+        set(gcf,'PaperPosition',[2 2 5 7]);
+        wysiwyg;
+
+    case 'Fig_variance'
+        D=varargin{1};   
+        dist  = [1 2 5]; 
+        distV = [1 12 45]; 
+        x=D.pEc(:,dist);
+        T.trueD = x(:); 
+        T.pE=x(:); 
+        x=D.Ec(:,dist);
+        T.E=x(:); 
+        x=D.pVc(:,distV);
+        T.pV=x(:); 
+        x=D.Vc(:,distV); 
+        T.V=x(:); 
+        T.crossval = ones(length(T.trueD),1); 
+        % Now repeat this for non-cros
+        S=T; 
+        x=D.pE(:,dist);
+        S.pE=x(:); 
+        x=D.E(:,dist);
+        S.E=x(:); 
+        x=D.pV(:,distV);
+        S.pV=x(:); 
+        x=D.V(:,distV); 
+        S.V=x(:); 
+        S.crossval = ones(length(T.trueD),1)*2; 
+        T=addstruct(T,S); 
+        xyplot(T.E,T.V,T.trueD,'split',T.crossval,'style_thickline','leg',{'crossvalidated','standard'});
+        hold on; 
+        xyplot(T.pE,T.pV,T.trueD,'split',T.crossval,'style_thickline','linestyle',':');
+        hold off; 
+        xlabel('Expected value');
+        ylabel('Variance');       
+        set(gcf,'PaperPosition',[2 2 4 3]);
+        wysiwyg;
+        set(gca,'YLim',[0 max(T.pV)+0.01]);
+        
+    case 'Fig_sqrt'
+        D=varargin{1};  
+        numDist = size(D.E,2); 
+        for i=1:length(D.var_a)
+            V=reshape(D.pV(i,:),numDist,numDist); 
+            pV=1./(4*sqrt(D.pE(i,:)'*D.pE(i,:))).*V; 
+            D.pVs(i,:)=pV(:)';
+            V=reshape(D.pVc(i,:),numDist,numDist); 
+            EE=D.pEc(i,:)'*D.pEc(i,:); 
+            EE(EE<eps)=NaN; 
+            pV=V./(4*sqrt(EE)); 
+            D.pVcs(i,:)=pV(:)';            
+        end; 
+        % Order the data into a new data frame 
+        dist  = [1 2 5]; 
+        distV = [1 12 45]; 
+        x=sqrt(D.pEc(:,dist));
+        T.trueD = x(:); 
+        T.pE=x(:); 
+        x=ssqrt(D.Ec(:,dist));
+        T.E=x(:); 
+        x=D.pVcs(:,distV);
+        T.pV=x(:); 
+        x=D.Vcs(:,distV); 
+        T.V=x(:); 
+        T.crossval = ones(length(T.trueD),1); 
+        % Now repeat this for non-cros
+        S=T; 
+        x=sqrt(D.pE(:,dist));
+        S.pE=x(:); 
+        x=sqrt(D.E(:,dist));
+        S.E=x(:); 
+        x=D.pVs(:,distV);
+        S.pV=x(:); 
+        x=D.Vs(:,distV); 
+        S.V=x(:); 
+        S.crossval = ones(length(T.trueD),1)*2; 
+        T=addstruct(T,S); 
+        xyplot(T.E,T.V,T.trueD,'split',T.crossval,'style_thickline','leg',{'crossvalidated','standard'});
+        hold on; 
+        xyplot(T.pE,T.pV,T.trueD,'split',T.crossval,'style_thickline','linestyle',':');
+        hold off; 
+        xlabel('Expected value');
+        ylabel('Variance');       
+        set(gcf,'PaperPosition',[2 2 4 3]);
+        wysiwyg;
+        set(gca,'YLim',[0 max(T.V)+0.02]);
+        
+    case 'Figure1'
+        label={'12','13','14','15','23','24','25','34','35','45'};
+        numDist = size(D.E,2); 
+        lineplot(D.var_a,[D.V(:,1) D.Vs(:,1)],'leg','auto','style_thickline'); 
+        subplot
         
         set(gcf,'PaperPosition',[2 2 5.5 12]);
         wysiwyg;
@@ -586,17 +704,17 @@ switch(what)
         colormap(hot);
         clim=[0 0.03];
         subplot(4,2,1);
-        imagesc(V{1},clim);
+        imagesc(reshape(T.V(1,:),numDist,numDist),clim);
         set(gca,'YTick',[1:10],'YTickLabel',label,'Box','off');
         subplot(4,2,2);
-        imagesc(V{end},clim);
+        imagesc(reshape(T.V(end,:),numDist,numDist),clim);
         set(gca,'YTick',[1:10],'YTickLabel',label,'Box','off');
         
         subplot(4,2,3);
-        imagesc(C{1},clim);
+        imagesc(reshape(T.pV(1,:),numDist,numDist),clim);
         set(gca,'YTick',[1:10],'YTickLabel',label,'Box','off');
         subplot(4,2,4);
-        imagesc(C{end},clim);
+        imagesc(reshape(T.pV(end,:),numDist,numDist),clim);
         set(gca,'YTick',[1:10],'YTickLabel',label,'Box','off');
         
         subplot(4,2,5);
