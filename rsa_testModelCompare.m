@@ -1,13 +1,12 @@
 function varargout=rsa_testModelCompare(what,varargin)
 % Testing for Constructing and fitting component models
 % Define optional parameter
-Opt.rootPath='/Users/joern/Desktop/rsaworkshop/rsatoolbox.v.2a/Demos/Demo_component';
-Opt.rootPath='/Users/joern/Talks/2015/02_Demo_component';
+% pt.rootPath='/Users/joern/Desktop/rsaworkshop/rsatoolbox.v.2a/Demos/Demo_component';
+% Opt.rootPath='/Users/joern/Talks/2015/02_Demo_component';
 % Opt.rootPath='/Users/jdiedrichsen/Talks/2015/02_Demo_component';
-tendigitDir='/Users/joern/Talks/2015/07_COSMO/practical';
-chordDir='/Users/joern/Projects/ChordPatternDist/analysis';
+% tendigitDir='/Users/joern/Talks/2015/07_COSMO/practical';
+% chordDir='/Users/joern/Projects/ChordPatternDist/analysis';
 baseDir = '/Users/jdiedrichsen/Dropbox (Diedrichsenlab)/Projects/modelCompare';
-% baseDir = '/Users/joern/Dropbox (Diedrichsenlab)/Projects/modelCompare';
 
 % Use develop branch of the RSA toolbox 
 import rsa.*;
@@ -60,7 +59,7 @@ switch (what)
         
         for m=1:2
             % Prep variance components
-            RDM{m}=rsa.rdm.squareRDM(M(m).RDM);
+            RDM{m}=rsa.rdm.squareRDM(M{m}.RDM);
             numCat=size(RDM{m},1);
             H = eye(numCat)-ones(numCat)/numCat;  % Centering matrix
             G{m}=-0.5*H*RDM{m}*H;
@@ -150,13 +149,16 @@ switch (what)
             
             % Calc cross-validated distance and noise estimate
             % try
-            [d_hat,Sig_hat] = rsa_distanceLDC(Y(:,:,n),part,conditions);
+            [d_hat,Sig_hat] = rsa.distanceLDC(Y(:,:,n),part,conditions);
+            Xcon = indicatorMatrix('identity',conditions);
+            d_1 = pdist(pinv(Xcon)*Y(:,:,n),'squaredeuclidean');
             % catch
-            %     tmp1 = indicatorMatrix('identity',conditions);
+            %     
             %     tmp2 = indicatorMatrix('allpairs',unique(conditions)');
             %     [d_hat,Sig_hat] = distance_ldc_sigma(Y(:,:,n),tmp1,tmp2,part);
             % end
             S.RDM(n,:) = d_hat';
+            S.RDMn(n,:)= d_1';
             S.Sig_hat(n,:)= Sig_hat(tril(true(D.numCond),0))';  % Get vectorized version of the variance-covariance matrix
             S.sig_hat(n,1)= mean(diag(Sig_hat));               % Noise variance estimate
             Sigma(:,:,n) = Sig_hat;
@@ -169,6 +171,10 @@ switch (what)
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsa_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',100,'outfile','sim_rsa_Exp2.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
         % rsa_testModelCompare('modelCompare','model','START_compl.mat','numSim',1,'outfile','sim_rsa_Exp3.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
+        % NEW RSA simulation 
+        % RSA_methods={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq'};
+        % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsan_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
+
         
         % PCM simulations
         %         rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',500,'outfile','sim_pcm_Exp1.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.8]);
@@ -179,12 +185,7 @@ switch (what)
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_opt_Exp1a.mat','methods',OPT_methods,'Omega',0.3);
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_opt_Exp2a.mat','methods',OPT_methods,'Omega',0.15);
         % rsa_testModelCompare('modelCompare','model','START_compl.mat','numSim',500,'outfile','sim_opt_Exp3a.mat','methods',OPT_methods,'Omega',0.5);
-        
-        % RSA simulations
-        % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsa_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
-        % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_rsa_Exp2.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
-        % rsa_testModelCompare('modelCompare','model','START_compl.mat','numSim',9,'outfile','sim_rsa_Exp3.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
-        %
+                %
         % Encode simulations
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_encPCMCorr_Exp1.mat','methods',{'encodePCMCorr'},'Omega',[0:0.1:0.8]);
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_encRidgeCorr_Exp1.mat','methods',{'encodeRidgeCorr'},'Omega',[0:0.1:0.8]);
@@ -214,7 +215,7 @@ switch (what)
         numModels = length(M);
         
         % Experimental constants
-        test=rsa.rdm.squareRDM(M(1).RDM);
+        test=rsa.rdm.squareRDM(M{1}.RDM);
         D.numCat = size(test,1);
         D.var_e   = 1;    % Noise variance
         D.numPart = Opt.numPart;
@@ -231,7 +232,7 @@ switch (what)
         % Prep the Variance components and regression matricies for each model
         for m=1:numModels
             % Prep variance components
-            RDM{m}=rsa.rdm.squareRDM(M(m).RDM);
+            RDM{m}=rsa.rdm.squareRDM(M{m}.RDM);
             G{m}=-0.5*H*RDM{m}*H;
             % Get the design matrix for encoding models
             [V,Lam]=eig(G{m});
@@ -249,7 +250,7 @@ switch (what)
             % Generate data from the two models
             Y=[];
             for m=1:numModels
-                [S,y,D]=rsa_testModelCompare('simulate_data',M(m),D);
+                [S,y,D]=rsa_testModelCompare('simulate_data',M{m},D);
                 S.truemodel=ones(D.numSim,1)*m;
                 T=addstruct(T,S);
                 Y=cat(3,Y,y);
@@ -261,25 +262,31 @@ switch (what)
                     tic;
                     switch(Opt.methods{meth})
                         case 'kendall'
-                            T.kendall(:,m)    = corr(T.RDM',M(m).RDM','type','Kendall');
+                            T.kendall(:,m)    = corr(T.RDM',M{m}.RDM','type','Kendall');
                         case 'spearman'
-                            T.spearman(:,m)   = corr(T.RDM',M(m).RDM','type','Spearman');
+                            T.spearman(:,m)   = corr(T.RDM',M{m}.RDM','type','Spearman');
                         case 'pearson'
-                            T.pearson(:,m)    = corr(T.RDM',M(m).RDM');
+                            T.pearson(:,m)    = corr(T.RDM',M{m}.RDM');
+                        case 'pearsonNc'
+                            T.pearsonNc(:,m)    = corr(T.RDMn',M{m}.RDM');
+                        case 'pearsonNcSq'
+                            T.pearsonNcSq(:,m)    = corr(sqrt(T.RDMn'),sqrt(M{m}.RDM'));
+                        case 'pearsonSq'
+                            T.pearsonSq(:,m)    = corr(sqrt(T.RDM'),sqrt(M{m}.RDM'));
                         case 'fixed'
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
                             [T.weight(:,m),T.fixed(:,m),T.loglikeFixed(:,m)] = ...
-                                rsa.stat.fitModelOLS(M(m).RDM',T.RDM);
+                                rsa.stat.fitModelOLS(M{m}.RDM',T.RDM);
                         case 'loglikIRLS'
                             % Likelihood under normal approximation with assumed Sigma
                             [T.weight(:,m),~,T.loglikIRLS(:,m)]=...
-                                rsa_fitModelIRLS(M(m).RDM',T.RDM,T.sig_hat,8,D.numVox);
+                                rsa_fitModelIRLS(M{m}.RDM',T.RDM,T.sig_hat,8,D.numVox);
                         case 'loglikIRLSsig'
                             % Likelihood under normal approximation with
                             % inferred structure, but open sigma for
                             % scaling
                             [T.weight(:,m),~,T.loglikIRLSsig(:,m)]=...
-                                rsa_fitModelIRLS(M(m).RDM',T.RDM,T.sig_hat,8,D.numVox,'assumeVoxelInd',0);
+                                rsa_fitModelIRLS(M{m}.RDM',T.RDM,T.sig_hat,8,D.numVox,'assumeVoxelInd',0);
                         case 'loglikPCM'
                             % Likihood of the PCM, without using a prior
                             % [~,theta1,~,la]=pcm_NR(Y(:,:,n),Xcond,'Gc',{G{m}},'X',Xpart,'hP',0);
@@ -468,10 +475,10 @@ switch (what)
         % Prep the Variance components and regression matricies for each model
         for m=1:numModels
             % Prep variance components
-            if isfield(M(m),'IPM')
-                G{m}=rsa_squareIPM(M(m).IPM);
+            if isfield(M{m},'IPM')
+                G{m}=rsa_squareIPM(M{m}.IPM);
             else 
-                RDM{m}=rsa.rdm.squareRDM(M(m).RDM);
+                RDM{m}=rsa.rdm.squareRDM(M{m}.RDM);
                 G{m}=-0.5*H*RDM{m}*H;
             end; 
             % Get the design matrix for encoding models
@@ -490,7 +497,7 @@ switch (what)
             % Generate data from the two models
             Y=[];
             for m=1:numModels
-                [S,y,D]=rsa_testModelCompare('simulate_data',M(m),D);
+                [S,y,D]=rsa_testModelCompare('simulate_data',M{m},D);
                 S.truemodel=ones(D.numSim,1)*m;
                 T=addstruct(T,S);
                 Y=cat(3,Y,y);
@@ -596,7 +603,7 @@ switch (what)
         % Prep the Variance components and regression matricies for each model
         for m=1:numModels
             % Prep variance components
-            RDM{m}=rsa.rdm.squareRDM(M(m).RDM);
+            RDM{m}=rsa.rdm.squareRDM(M{m}.RDM);
             G{m}=-0.5*H*RDM{m}*H;
             % Get the design matrix for encoding models
             [V,Lam]=eig(G{m});
@@ -615,7 +622,7 @@ switch (what)
             % Generate data from the two models
             Y=[];
             for m=1:numModels
-                [S,y,D]=rsa_testModelFit('simulate_data',M(m),D);
+                [S,y,D]=rsa_testModelFit('simulate_data',M{m},D);
                 S.truemodel=ones(D.numSim,1)*m;
                 T=addstruct(T,S);
                 Y=cat(3,Y,y);
@@ -729,7 +736,7 @@ switch (what)
         % Prep the Variance components and regression matricies for each model
         for m=1:numModels
             % Prep variance components
-            RDM{m}=rsa.rdm.squareRDM(M(m).RDM);
+            RDM{m}=rsa.rdm.squareRDM(M{m}.RDM);
             G{m}=-0.5*H*RDM{m}*H;
             % Standarsize ???
             
@@ -749,7 +756,7 @@ switch (what)
             % Generate data from the two models
             Y=[];
             for m=1:numModels
-                [S,y,D]=rsa_testModelFit('simulate_data',M(m),D);
+                [S,y,D]=rsa_testModelFit('simulate_data',M{m},D);
                 S.truemodel=ones(D.numSim,1)*m;
                 T=addstruct(T,S);
                 Y=cat(3,Y,y);
