@@ -151,14 +151,14 @@ switch (what)
             % try
             [d_hat,Sig_hat] = rsa.distanceLDC(Y(:,:,n),part,conditions);
             Xcon = indicatorMatrix('identity',conditions);
-            d_1 = pdist(pinv(Xcon)*Y(:,:,n),'squaredeuclidean');
+            d_1 = pdist(pinv(Xcon)*Y(:,:,n),'euclidean');
             % catch
             %     
             %     tmp2 = indicatorMatrix('allpairs',unique(conditions)');
             %     [d_hat,Sig_hat] = distance_ldc_sigma(Y(:,:,n),tmp1,tmp2,part);
             % end
             S.RDM(n,:) = d_hat';
-            S.RDMn(n,:)= d_1';
+            S.RDMn(n,:)= (d_1.*d_1)';
             S.Sig_hat(n,:)= Sig_hat(tril(true(D.numCond),0))';  % Get vectorized version of the variance-covariance matrix
             S.sig_hat(n,1)= mean(diag(Sig_hat));               % Noise variance estimate
             Sigma(:,:,n) = Sig_hat;
@@ -172,8 +172,9 @@ switch (what)
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',100,'outfile','sim_rsa_Exp2.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
         % rsa_testModelCompare('modelCompare','model','START_compl.mat','numSim',1,'outfile','sim_rsa_Exp3.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
         % NEW RSA simulation 
-        % RSA_methods={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq'};
+        % RSA_methods={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq','fixed','loglikPCM'};
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsan_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
+        % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',500,'outfile','sim_pcm_Exp2.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
 
         
         % PCM simulations
@@ -262,9 +263,9 @@ switch (what)
                     tic;
                     switch(Opt.methods{meth})
                         case 'kendall'
-                            T.kendall(:,m)    = corr(T.RDM',M{m}.RDM','type','Kendall');
+                            T.kendall(:,m)    = corr(T.RDMn',M{m}.RDM','type','Kendall');
                         case 'spearman'
-                            T.spearman(:,m)   = corr(T.RDM',M{m}.RDM','type','Spearman');
+                            T.spearman(:,m)   = corr(T.RDMn',M{m}.RDM','type','Spearman');
                         case 'pearson'
                             T.pearson(:,m)    = corr(T.RDM',M{m}.RDM');
                         case 'pearsonNc'
@@ -273,6 +274,16 @@ switch (what)
                             T.pearsonNcSq(:,m)    = corr(sqrt(T.RDMn'),sqrt(M{m}.RDM'));
                         case 'pearsonSq'
                             T.pearsonSq(:,m)    = corr(sqrt(T.RDM'),sqrt(M{m}.RDM'));
+                        case 'cosine' 
+                            nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
+                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2)); 
+                            T.cosine(:,m)   =   nRDM*mRDM; 
+                        case 'cosine_WNull' % Cosine angle weighted by the covariance structure under the Null-hypothesis
+                            nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
+                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2)); 
+                            C=pcm_indicatorMatrix('allpairs',[1:D.numCat]); 
+                            varD = rsa_varianceLDC(zeros(D.numCat),C,eye(D.numCat),D.numPart,D.numVox); 
+                            T.cosine_WNull(:,m)   =   nRDM*(varD\mRDM); 
                         case 'fixed'
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
                             [T.weight(:,m),T.fixed(:,m),T.loglikeFixed(:,m)] = ...
@@ -288,17 +299,16 @@ switch (what)
                             [T.weight(:,m),~,T.loglikIRLSsig(:,m)]=...
                                 rsa_fitModelIRLS(M{m}.RDM',T.RDM,T.sig_hat,8,D.numVox,'assumeVoxelInd',0);
                         case 'loglikPCM'
-                            % Likihood of the PCM, without using a prior
-                            % [~,theta1,~,la]=pcm_NR(Y(:,:,n),Xcond,'Gc',{G{m}},'X',Xpart,'hP',0);
-                            % Should be equivalent - but test again
-                            
-                            for n=1:size(T.RDM,1)
-                                [~,theta,~,l]=pcm_NR_diag(Y(:,:,n),Xcond*X{m},'Gd',ones(numReg(m),1),'X',Xpart,'hP',0);
-                                % [~,theta1,~,la]=pcm_NR(Y(:,:,n),Xcond,'Gc',{G{m}},'X',Xpart,'hP',0);
-                                T.loglikPCM(n,m) = l(1);
+                          % PCM-based likelihood. 
+                           OPT.fitScale = 1;
+                           OPT.runEffect = [];                
+                           for n=1:size(T.RDM,1)
+                                YY = Y(:,:,n)*Y(:,:,n)'; 
+                                fcn = @(x) pcm_likelihoodIndivid(x,YY,M{m},Xcond,Xpart,Opt.numVox,OPT);
+                                [theta,T.loglikPCM(n,m)] = pcm_NR(zeros(2,1),fcn); 
                                 T.PCMs(n,m)=theta(1);
                                 T.PCMe(n,m)=theta(2);
-                            end;
+                           end;         
                         case 'encodeReg'
                             % Encoding model without regularisation
                             for n=1:size(T.RDM,1)
@@ -870,15 +880,15 @@ switch (what)
         
         load(fullfile(baseDir,'Model_fiveFinger.mat'));
         subplot(3,2,1);
-        rsa.fig.imageRDMs(M(1),'transformfcn','ssqrt','singleRDM',1,'colourScheme',gray);
+        rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1,'colourScheme',gray);
         subplot(3,2,3);
-        rsa.fig.imageRDMs(M(2),'transformfcn','ssqrt','singleRDM',1,'colourScheme',gray);
+        rsa.fig.imageRDMs(M{2},'transformfcn','ssqrt','singleRDM',1,'colourScheme',gray);
         
         load(fullfile(baseDir,'Model_chords.mat'))
         subplot(3,2,2);
-        rsa.fig.imageRDMs(M(1),'transformfcn','ssqrt','singleRDM',1,'colourScheme',gray);
+        rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1,'colourScheme',gray);
         subplot(3,2,4);
-        rsa.fig.imageRDMs(M(2),'transformfcn','ssqrt','singleRDM',1,'colourScheme',gray);
+        rsa.fig.imageRDMs(M{2},'transformfcn','ssqrt','singleRDM',1,'colourScheme',gray);
         for ex=1:2
             
             T=[];
@@ -950,24 +960,63 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
+    case 'Figure_rsa_new'
+        filesNames={'rsan'};
+        cd(baseDir);
+        for ex=1:3
+            
+            T=[];
+            S=[];
+            
+            % Load RSA files
+            for f=1:2
+                files=dir(sprintf('sim_%s_Exp%d*',filesNames{f},ex));
+                for i=1:length(files)
+                    R=load(files(i).name);
+                    [Num,om]=pivottable(R.U.omega,[],R.U.sig_hat,'length');
+                    for o=1:length(om)
+                        R.T.numSim(R.T.omega==om(o),1)=Num(o);
+                    end;
+                    T=addstruct(T,R.T);
+                end;
+                T.omega = round(T.omega,3);
+                D=tapply(T,{'method','methodStr','omega'},{T.propCorr.*T.numSim,'sum','name','numCorr'},{T.numSim,'sum','name','numSim'});
+                D.propCorr = D.numCorr ./ D.numSim;
+                S=addstruct(S,D);
+            end;
+            
+            subplot(1,3,ex);
+            if (ex==1)
+                lineplot(D.omega,D.propCorr,'split',D.methodStr,'style_thickline','leg','auto','subset',~strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
+            else
+                lineplot(D.omega,D.propCorr,'split',D.methodStr,'style_thickline','subset',~strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
+            end;
+            hold on;
+            lineplot(D.omega,D.propCorr,'split',D.methodStr,'linestyle',':','linecolor','k','subset',strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
+            hold off;
+            set(gca,'YLim',[0.4 1]);
+            drawline(0.5,'dir','horz');
+        end;
+        set(gcf,'PaperPosition',[0 0 12 3]);
+        wysiwyg;
     case 'Figure_models'
         load(fullfile(baseDir,'Model_fiveFinger.mat'));
         subplot(2,3,1);
-        rsa.fig.imageRDMs(M(1),'transformfcn','ssqrt','singleRDM',1);
+        rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1);
         subplot(2,3,4);
-        rsa.fig.imageRDMs(M(2),'transformfcn','ssqrt','singleRDM',1);
+        rsa.fig.imageRDMs(M{2},'transformfcn','ssqrt','singleRDM',1);
         
         load(fullfile(baseDir,'Model_chords.mat'))
         subplot(2,3,2);
-        rsa.fig.imageRDMs(M(1),'transformfcn','ssqrt','singleRDM',1);
+        rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1);
         subplot(2,3,5);
-        rsa.fig.imageRDMs(M(2),'transformfcn','ssqrt','singleRDM',1);
+        rsa.fig.imageRDMs(M{2},'transformfcn','ssqrt','singleRDM',1);
         
         load(fullfile(baseDir,'START_compl.mat'));
         subplot(2,3,3);
-        rsa.fig.imageRDMs(M(1),'transformfcn','ssqrt','singleRDM',1);
+        rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1);
         subplot(2,3,6);
-        rsa.fig.imageRDMs(M(7),'transformfcn','ssqrt','singleRDM',1);
+        rsa.fig.imageRDMs(M{7},'transformfcn','ssqrt','singleRDM',1);
     case 'Figure_regularisation'  % Figure 6 in paper 
         T=[];
         files=dir('sim_encodeRegularise_Exp2*');
