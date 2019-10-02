@@ -180,6 +180,7 @@ switch (what)
         % 
         % Probabilistic RSA simlation 
         % RSA_methods={'pearson','cosine','cosineWNull','cosineWData','loglikIRLS'};
+        % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsaProb_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_rsaProb_Exp2a.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
         % 
         % 
@@ -288,16 +289,12 @@ switch (what)
                             mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));
                             T.cosine(:,m)   =   nRDM*mRDM;
                         case 'cosineWNull' % Cosine angle weighted by the covariance structure under the Null-hypothesis
-                            nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2))); % Normalize the data 
-                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));           % Normalize the model 
                             varD = rsa_varianceLDC(zeros(D.numCat),C,eye(D.numCat),D.numPart,D.numVox); % Get the variance 
-                            T.cosineWNull(:,m)   =   nRDM*(varD\mRDM);
+                            T.cosineWNull(:,m)   =   cosineW(T.RDM,M{m}.RDM,varD); 
                         case 'cosineWData' % Cosine angle weighted by the covariance structure under the Full hypothesis
-                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));
                             for n=1:size(T.RDM,1)
-                                nRDM=T.RDM(n,:)./sqrt(sum(T.RDM(n,:).^2,2));
                                 varD = rsa_varianceLDC(T.RDM(n,:)',C,T.sig_hat(n,:),D.numPart,D.numVox);
-                                T.cosineWData(n,m)   =   nRDM*(varD\mRDM);
+                                T.cosineWData(n,m)   =  cosineW(T.RDM(n,:),M{m}.RDM,varD); ;
                             end; 
                         case 'fixed'
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
@@ -1171,9 +1168,20 @@ switch (what)
             set(gca,'XTickLabel',{methods{1:3},''});
         end;
         set(gcf,'PaperPosition',[0 0 9 5]);
-        wysiwyg;
-        
+        wysiwyg;  
 end;
 
-
-
+function r=cosineW(A,B,Sig); % Weighted cosine similarity measure 
+    % A: N x q vector 
+    % B: M x q vector 
+    % Sig: qxq variance matrix 
+    % Output: 
+    % N*M weighted inner product (cosineW) 
+    [V,L]=eig(Sig);   
+    l=diag(L);
+    sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
+    wA=A*sq; 
+    wB=B*sq; 
+    wA=bsxfun(@rdivide,wA,sqrt(sum(wA.^2,2)));
+    wB=bsxfun(@rdivide,wB,sqrt(sum(wB.^2,2)));
+    r=wA*wB';
