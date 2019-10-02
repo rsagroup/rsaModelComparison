@@ -8,7 +8,7 @@ function varargout=rsa_testModelCompare(what,varargin)
 % chordDir='/Users/joern/Projects/ChordPatternDist/analysis';
 baseDir = '/Users/jdiedrichsen/Dropbox (Diedrichsenlab)/Projects/modelCompare';
 
-% Use develop branch of the RSA toolbox 
+% Use develop branch of the RSA toolbox
 import rsa.*;
 import rsa.util.*;
 import rsa.stat.*;
@@ -116,7 +116,7 @@ switch (what)
         % Get design matrix
         Za  = kron(ones(D.numPart,1),eye(D.numCond));
         
-        X           = Model.RDM';
+        X           = double(Model.RDM');
         if (size(D.omega,1)==1)
             D.omega=repmat(D.omega,D.numSim,1);
         end;
@@ -125,7 +125,7 @@ switch (what)
         for n = 1:D.numSim
             
             % Make true distances
-            D.d_true    = D.omega(n,:)*X';
+            D.d_true    = double(D.omega(n,:)*X');
             % Now make true covariance matrix: infer from distances if not
             % given
             if (isfield(Model,'IPM'));   % See if there is a inner product matrix
@@ -153,7 +153,7 @@ switch (what)
             Xcon = indicatorMatrix('identity',conditions);
             d_1 = pdist(pinv(Xcon)*Y(:,:,n),'euclidean');
             % catch
-            %     
+            %
             %     tmp2 = indicatorMatrix('allpairs',unique(conditions)');
             %     [d_hat,Sig_hat] = distance_ldc_sigma(Y(:,:,n),tmp1,tmp2,part);
             % end
@@ -170,23 +170,23 @@ switch (what)
         % RSA simulations
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsa_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',100,'outfile','sim_rsa_Exp2.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
-        % rsa_testModelCompare('modelCompare','model','START_compl.mat','numSim',1,'outfile','sim_rsa_Exp3.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
-        % NEW RSA simulation 
-        % RSA_methods={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq','fixed','loglikPCM'};
+        % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',1,'outfile','sim_rsa_Exp3.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
+        % NEW RSA simulation
+        % RSA_methods={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq','cosine','loglikPCM'};
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsan_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
-        % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',500,'outfile','sim_pcm_Exp2.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
-
-        
+        % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_rsan_Exp2a.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
+      % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',200,'outfile','sim_rsan_Exp3a.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
+      % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',200,'outfile','sim_rsan_Exp3b.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);   
         % PCM simulations
         %         rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',500,'outfile','sim_pcm_Exp1.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.8]);
         %         rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',100,'outfile','sim_pcm_Exp2.mat','methods',{'loglikPCM'},'Omega',[0:0.05:0.3]);
-        %         rsa_testModelCompare('modelCompare','model','START_compl.mat','numSim',100,'outfile','sim_pcm_Exp3.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.8]);
+        %         rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',100,'outfile','sim_pcm_Exp3.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.8]);
         %
         % OPT_methods={'encodePCM','loglikIRLS','loglikPCM'};
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_opt_Exp1a.mat','methods',OPT_methods,'Omega',0.3);
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_opt_Exp2a.mat','methods',OPT_methods,'Omega',0.15);
-        % rsa_testModelCompare('modelCompare','model','START_compl.mat','numSim',500,'outfile','sim_opt_Exp3a.mat','methods',OPT_methods,'Omega',0.5);
-                %
+        % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',500,'outfile','sim_opt_Exp3a.mat','methods',OPT_methods,'Omega',0.5);
+        %
         % Encode simulations
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_encPCMCorr_Exp1.mat','methods',{'encodePCMCorr'},'Omega',[0:0.1:0.8]);
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_encRidgeCorr_Exp1.mat','methods',{'encodeRidgeCorr'},'Omega',[0:0.1:0.8]);
@@ -274,16 +274,16 @@ switch (what)
                             T.pearsonNcSq(:,m)    = corr(sqrt(T.RDMn'),sqrt(M{m}.RDM'));
                         case 'pearsonSq'
                             T.pearsonSq(:,m)    = corr(sqrt(T.RDM'),sqrt(M{m}.RDM'));
-                        case 'cosine' 
+                        case 'cosine'
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
-                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2)); 
-                            T.cosine(:,m)   =   nRDM*mRDM; 
+                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));
+                            T.cosine(:,m)   =   nRDM*mRDM;
                         case 'cosine_WNull' % Cosine angle weighted by the covariance structure under the Null-hypothesis
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
-                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2)); 
-                            C=pcm_indicatorMatrix('allpairs',[1:D.numCat]); 
-                            varD = rsa_varianceLDC(zeros(D.numCat),C,eye(D.numCat),D.numPart,D.numVox); 
-                            T.cosine_WNull(:,m)   =   nRDM*(varD\mRDM); 
+                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));
+                            C=pcm_indicatorMatrix('allpairs',[1:D.numCat]);
+                            varD = rsa_varianceLDC(zeros(D.numCat),C,eye(D.numCat),D.numPart,D.numVox);
+                            T.cosine_WNull(:,m)   =   nRDM*(varD\mRDM);
                         case 'fixed'
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
                             [T.weight(:,m),T.fixed(:,m),T.loglikeFixed(:,m)] = ...
@@ -299,16 +299,16 @@ switch (what)
                             [T.weight(:,m),~,T.loglikIRLSsig(:,m)]=...
                                 rsa_fitModelIRLS(M{m}.RDM',T.RDM,T.sig_hat,8,D.numVox,'assumeVoxelInd',0);
                         case 'loglikPCM'
-                          % PCM-based likelihood. 
-                           OPT.fitScale = 1;
-                           OPT.runEffect = [];                
-                           for n=1:size(T.RDM,1)
-                                YY = Y(:,:,n)*Y(:,:,n)'; 
+                            % PCM-based likelihood.
+                            OPT.fitScale = 1;
+                            OPT.runEffect = [];
+                            for n=1:size(T.RDM,1)
+                                YY = Y(:,:,n)*Y(:,:,n)';
                                 fcn = @(x) pcm_likelihoodIndivid(x,YY,M{m},Xcond,Xpart,Opt.numVox,OPT);
-                                [theta,T.loglikPCM(n,m)] = pcm_NR(zeros(2,1),fcn); 
+                                [theta,T.loglikPCM(n,m)] = pcm_NR(zeros(2,1),fcn);
                                 T.PCMs(n,m)=theta(1);
                                 T.PCMe(n,m)=theta(2);
-                           end;         
+                            end;
                         case 'encodeReg'
                             % Encoding model without regularisation
                             for n=1:size(T.RDM,1)
@@ -456,7 +456,7 @@ switch (what)
         Opt.numVox  = 40;
         Opt.outfile = [];
         Opt.Omega   = 0.2;
-        U=[]; 
+        U=[];
         
         Opt=rsa.getUserOptions(varargin,Opt);
         
@@ -487,10 +487,10 @@ switch (what)
             % Prep variance components
             if isfield(M{m},'IPM')
                 G{m}=rsa_squareIPM(M{m}.IPM);
-            else 
+            else
                 RDM{m}=rsa.rdm.squareRDM(M{m}.RDM);
                 G{m}=-0.5*H*RDM{m}*H;
-            end; 
+            end;
             % Get the design matrix for encoding models
             [V,Lam]=eig(G{m});
             [lambda{m},i]=sort(diag(Lam),'descend');
@@ -961,41 +961,52 @@ switch (what)
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
     case 'Figure_rsa_new'
-        filesNames={'rsan'};
+        filesNames={'rsan','pcm'};
+        methodStr={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq','cosine','loglikPCM'};
         cd(baseDir);
         for ex=1:3
             
             T=[];
             S=[];
-            
+            D=[];
             % Load RSA files
-            for f=1:2
+            for f=1:length(filesNames);
                 files=dir(sprintf('sim_%s_Exp%d*',filesNames{f},ex));
-                for i=1:length(files)
-                    R=load(files(i).name);
-                    [Num,om]=pivottable(R.U.omega,[],R.U.sig_hat,'length');
-                    for o=1:length(om)
-                        R.T.numSim(R.T.omega==om(o),1)=Num(o);
+                if (~isempty(files))
+                    for i=1:length(files)
+                        R=load(files(i).name);
+                        [Num,om]=pivottable(R.U.omega,[],R.U.sig_hat,'length');
+                        for o=1:length(om)
+                            R.T.numSim(R.T.omega==om(o),1)=Num(o);
+                        end;
+                        T=addstruct(T,R.T);
                     end;
-                    T=addstruct(T,R.T);
+                    T.omega = round(T.omega,3);
+                    S=tapply(T,{'method','methodStr','omega'},{T.propCorr.*T.numSim,'sum','name','numCorr'},{T.numSim,'sum','name','numSim'});
+                    S.propCorr = S.numCorr ./ S.numSim;
+                    D=addstruct(D,S);
                 end;
-                T.omega = round(T.omega,3);
-                D=tapply(T,{'method','methodStr','omega'},{T.propCorr.*T.numSim,'sum','name','numCorr'},{T.numSim,'sum','name','numSim'});
-                D.propCorr = D.numCorr ./ D.numSim;
-                S=addstruct(S,D);
             end;
-            
-            subplot(1,3,ex);
-            if (ex==1)
-                lineplot(D.omega,D.propCorr,'split',D.methodStr,'style_thickline','leg','auto','subset',~strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
-            else
-                lineplot(D.omega,D.propCorr,'split',D.methodStr,'style_thickline','subset',~strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
+            if (~isempty(D))
+                for i=1:length(methodStr)
+                    a=strcmp(methodStr{i},D.methodStr);
+                    D.method(a)=i; 
+                end;
+                CAT.linecolor={'g','b','b','r','r','m','k'};
+                CAT.markercolor={'g','b','b','r','r','m','k'};
+                CAT.linewidth={2,2,2,2,2,2,1};
+                CAT.linestyle={'-','-',':','-',':','-',':'};
+                subplot(1,3,ex);
+                if (ex==1)
+                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
+                        'leg',methodStr,'CAT',CAT,'errorfcn',[]);
+                else
+                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
+                        'CAT',CAT,'errorfcn',[]);
+                end;
+                set(gca,'YLim',[0.4 1]);
+                drawline(0.5,'dir','horz');
             end;
-            hold on;
-            lineplot(D.omega,D.propCorr,'split',D.methodStr,'linestyle',':','linecolor','k','subset',strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
-            hold off;
-            set(gca,'YLim',[0.4 1]);
-            drawline(0.5,'dir','horz');
         end;
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
@@ -1017,7 +1028,7 @@ switch (what)
         rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1);
         subplot(2,3,6);
         rsa.fig.imageRDMs(M{7},'transformfcn','ssqrt','singleRDM',1);
-    case 'Figure_regularisation'  % Figure 6 in paper 
+    case 'Figure_regularisation'  % Figure 6 in paper
         T=[];
         files=dir('sim_encodeRegularise_Exp2*');
         for i=1:length(files)
@@ -1039,7 +1050,7 @@ switch (what)
         drawline(0.5,'dir','horz');
         set(gcf,'PaperPosition',[0 0 3 7])
         wysiwyg
-    case 'Figure_pcm_rsa_encode'  % Figure 7 in paper 
+    case 'Figure_pcm_rsa_encode'  % Figure 7 in paper
         filesNames={'encRidgeCorr','rsa','pcm'};
         cd(baseDir);
         for ex=1:3
@@ -1052,14 +1063,14 @@ switch (what)
                 files=dir(sprintf('sim_%s_Exp%d*',filesNames{f},ex));
                 for i=1:length(files)
                     R=load(files(i).name);
-                    if (isfield(R,'U'))  % Deal with missing U from last simulation 
+                    if (isfield(R,'U'))  % Deal with missing U from last simulation
                         [Num,om]=pivottable(R.U.omega,[],R.U.sig_hat,'length');
                         for o=1:length(om)
                             R.T.numSim(R.T.omega==om(o),1)=Num(o);
                         end;
-                    else 
+                    else
                         R.T.numSim=ones(length(R.T.omega),1)*1000;
-                    end; 
+                    end;
                     T=addstruct(T,R.T);
                 end;
                 T.omega = round(T.omega,3);
@@ -1067,9 +1078,9 @@ switch (what)
                 D.propCorr = D.numCorr ./ D.numSim;
                 S=addstruct(S,D);
             end;
-            CAT.linecolor = {'b','g','r','g','g'}; 
-            CAT.linestyle = {'-','-','-',':','--'}; 
-            CAT.markercolor = {'b','g','r','g','g'}; 
+            CAT.linecolor = {'b','g','r','g','g'};
+            CAT.linestyle = {'-','-','-',':','--'};
+            CAT.markercolor = {'b','g','r','g','g'};
             
             subplot(1,3,ex);
             if (ex==1)
@@ -1084,12 +1095,12 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
-    case 'Figure_bestMethods'     % Figure 8 in paper 
+    case 'Figure_bestMethods'     % Figure 8 in paper
         methods={'loglikIRLS','loglikPCM','encodePCM','encodePCMcorr'};
         methType = [1 2 3 3 4 4]';
         evalType = [1 1 1 2 1 2]';
         numMethods = length(methods);
-        cd (baseDir); 
+        cd (baseDir);
         for ex=1:3
             
             T=[];
@@ -1146,7 +1157,7 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 9 5]);
         wysiwyg;
-
+        
 end;
 
 
