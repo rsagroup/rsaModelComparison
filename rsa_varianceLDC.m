@@ -28,6 +28,7 @@ if (m==n) % Square matrix: Second moment
 else 
     G  =  squareform(-0.5*d); % Vector: distances
 end; 
+
 nCond = size(G,1); 
 
 % Get the within-fold variance-covariance matrix of distances 

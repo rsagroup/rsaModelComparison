@@ -117,24 +117,24 @@ switch (what)
         Za  = kron(ones(D.numPart,1),eye(D.numCond));
         
         X           = double(Model.RDM');
-        if (size(D.omega,1)==1)
-            D.omega=repmat(D.omega,D.numSim,1);
+        % Make true distances
+        D.d_true    = double(D.omega*X');
+        
+        % Now make true covariance matrix: infer from distances if not
+        % given
+        if (isfield(Model,'IPM'));   % See if there is a inner product matrix
+            G  = D.omega*Model.IPM;
+            G  = rsa_squareIPM(G);
+        else
+            H  = eye(D.numCond)-ones(D.numCond)/D.numCond;
+            G  = -0.5 * H * squareform(D.d_true) * H';      % mean subtracted
         end;
+
+        
         S = [];
         
         for n = 1:D.numSim
             
-            % Make true distances
-            D.d_true    = double(D.omega(n,:)*X');
-            % Now make true covariance matrix: infer from distances if not
-            % given
-            if (isfield(Model,'IPM'));   % See if there is a inner product matrix
-                G  = D.omega(n,:)*Model.IPM;
-                G  = rsa_squareIPM(G);
-            else
-                H  = eye(D.numCond)-ones(D.numCond)/D.numCond;
-                G  = -0.5 * H * squareform(D.d_true) * H';      % mean subtracted
-            end;
             
             % Scale if necessary
             if (isfield(D,'phi'))
@@ -175,8 +175,15 @@ switch (what)
         % RSA_methods={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq','cosine','loglikPCM'};
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsan_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_rsan_Exp2a.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
-      % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',200,'outfile','sim_rsan_Exp3a.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
-      % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',200,'outfile','sim_rsan_Exp3b.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);   
+        % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',200,'outfile','sim_rsan_Exp3a.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
+        % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',200,'outfile','sim_rsan_Exp3b.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);   
+        % 
+        % Probabilistic RSA simlation 
+        % RSA_methods={'pearson','cosine','cosineWNull','cosineWData','loglikIRLS'};
+        % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_rsaProb_Exp2a.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
+        % 
+        % 
+        % 
         % PCM simulations
         %         rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',500,'outfile','sim_pcm_Exp1.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.8]);
         %         rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',100,'outfile','sim_pcm_Exp2.mat','methods',{'loglikPCM'},'Omega',[0:0.05:0.3]);
@@ -228,7 +235,9 @@ switch (what)
         part  = kron([1:D.numPart]',ones(D.numCat,1));
         cond  = kron(ones(D.numPart,1),[1:D.numCat]');
         Xpart = indicatorMatrix('identity',part);
-        Xcond = indicatorMatrix('identity',cond);
+        Xcond = indicatorMatrix('identity',cond);                            
+        C=pcm_indicatorMatrix('allpairs',[1:D.numCat]);  % Contrast vector for all pairs 
+
         
         % Prep the Variance components and regression matricies for each model
         for m=1:numModels
@@ -278,12 +287,18 @@ switch (what)
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
                             mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));
                             T.cosine(:,m)   =   nRDM*mRDM;
-                        case 'cosine_WNull' % Cosine angle weighted by the covariance structure under the Null-hypothesis
-                            nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
+                        case 'cosineWNull' % Cosine angle weighted by the covariance structure under the Null-hypothesis
+                            nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2))); % Normalize the data 
+                            mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));           % Normalize the model 
+                            varD = rsa_varianceLDC(zeros(D.numCat),C,eye(D.numCat),D.numPart,D.numVox); % Get the variance 
+                            T.cosineWNull(:,m)   =   nRDM*(varD\mRDM);
+                        case 'cosineWData' % Cosine angle weighted by the covariance structure under the Full hypothesis
                             mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));
-                            C=pcm_indicatorMatrix('allpairs',[1:D.numCat]);
-                            varD = rsa_varianceLDC(zeros(D.numCat),C,eye(D.numCat),D.numPart,D.numVox);
-                            T.cosine_WNull(:,m)   =   nRDM*(varD\mRDM);
+                            for n=1:size(T.RDM,1)
+                                nRDM=T.RDM(n,:)./sqrt(sum(T.RDM(n,:).^2,2));
+                                varD = rsa_varianceLDC(T.RDM(n,:)',C,T.sig_hat(n,:),D.numPart,D.numVox);
+                                T.cosineWData(n,m)   =   nRDM*(varD\mRDM);
+                            end; 
                         case 'fixed'
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
                             [T.weight(:,m),T.fixed(:,m),T.loglikeFixed(:,m)] = ...
@@ -291,13 +306,13 @@ switch (what)
                         case 'loglikIRLS'
                             % Likelihood under normal approximation with assumed Sigma
                             [T.weight(:,m),~,T.loglikIRLS(:,m)]=...
-                                rsa_fitModelIRLS(M{m}.RDM',T.RDM,T.sig_hat,8,D.numVox);
+                                rsa_fitModelIRLS(M{m}.RDM',T.RDM,T.sig_hat,D.numPart,D.numVox);
                         case 'loglikIRLSsig'
                             % Likelihood under normal approximation with
                             % inferred structure, but open sigma for
                             % scaling
                             [T.weight(:,m),~,T.loglikIRLSsig(:,m)]=...
-                                rsa_fitModelIRLS(M{m}.RDM',T.RDM,T.sig_hat,8,D.numVox,'assumeVoxelInd',0);
+                                rsa_fitModelIRLS(M{m}.RDM',T.RDM,T.sig_hat,D.numPart,D.numVox,'assumeVoxelInd',0);
                         case 'loglikPCM'
                             % PCM-based likelihood.
                             OPT.fitScale = 1;
