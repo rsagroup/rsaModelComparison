@@ -182,7 +182,7 @@ switch (what)
         % RSA_methods={'pearson','cosine','cosineWNull','cosineWData','loglikIRLS'};
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsaProb_Exp1.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_rsaProb_Exp2a.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
-        % 
+        % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',50,'outfile','sim_rsaProb_Exp3a.mat','methods',RSA_methods,'Omega',[0:0.1:0.6]);
         % 
         % 
         % PCM simulations
@@ -1008,6 +1008,56 @@ switch (what)
                 CAT.markercolor={'g','b','b','r','r','m','k'};
                 CAT.linewidth={2,2,2,2,2,2,1};
                 CAT.linestyle={'-','-',':','-',':','-',':'};
+                subplot(1,3,ex);
+                if (ex==1)
+                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
+                        'leg',methodStr,'CAT',CAT,'errorfcn',[]);
+                else
+                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
+                        'CAT',CAT,'errorfcn',[]);
+                end;
+                set(gca,'YLim',[0.4 1]);
+                drawline(0.5,'dir','horz');
+            end;
+        end;
+        set(gcf,'PaperPosition',[0 0 12 3]);
+        wysiwyg;
+     case 'Figure_rsa_prob'
+        filesNames={'rsaProb','pcm'};
+        methodStr={'pearson','cosine','cosineWNull','cosineWData','loglikIRLS','loglikPCM'};
+        cd(baseDir);
+        for ex=1:3
+            
+            T=[];
+            S=[];
+            D=[];
+            % Load RSA files
+            for f=1:length(filesNames);
+                files=dir(sprintf('sim_%s_Exp%d*',filesNames{f},ex));
+                if (~isempty(files))
+                    for i=1:length(files)
+                        R=load(files(i).name);
+                        [Num,om]=pivottable(R.U.omega,[],R.U.sig_hat,'length');
+                        for o=1:length(om)
+                            R.T.numSim(R.T.omega==om(o),1)=Num(o);
+                        end;
+                        T=addstruct(T,R.T);
+                    end;
+                    T.omega = round(T.omega,3);
+                    S=tapply(T,{'method','methodStr','omega'},{T.propCorr.*T.numSim,'sum','name','numCorr'},{T.numSim,'sum','name','numSim'});
+                    S.propCorr = S.numCorr ./ S.numSim;
+                    D=addstruct(D,S);
+                end;
+            end;
+            if (~isempty(D))
+                for i=1:length(methodStr)
+                    a=strcmp(methodStr{i},D.methodStr);
+                    D.method(a)=i; 
+                end;
+                CAT.linecolor={'b','m','r','r','r','k'};
+                CAT.markercolor={'b','m','r','r','r','k'};
+                CAT.linewidth={2,2,2,2,2,1};
+                CAT.linestyle={'-','-',':','--','-',':'};
                 subplot(1,3,ex);
                 if (ex==1)
                     lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
