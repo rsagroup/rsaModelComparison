@@ -289,12 +289,14 @@ switch (what)
                             mRDM=(M{m}.RDM')/sqrt(sum(M{m}.RDM.^2));
                             T.cosine(:,m)   =   nRDM*mRDM;
                         case 'cosineWNull' % Cosine angle weighted by the covariance structure under the Null-hypothesis
-                            varD = rsa_varianceLDC(zeros(D.numCat),C,eye(D.numCat),D.numPart,D.numVox); % Get the variance 
+                            varD = rsa_varianceLDC(zeros(D.numCat),C,mean(T.sig_hat),D.numPart,D.numVox); % Get the variance 
                             T.cosineWNull(:,m)   =   cosineW(T.RDM,M{m}.RDM,varD); 
                         case 'cosineWData' % Cosine angle weighted by the covariance structure under the Full hypothesis
                             for n=1:size(T.RDM,1)
-                                varD = rsa_varianceLDC(T.RDM(n,:)',C,T.sig_hat(n,:),D.numPart,D.numVox);
-                                T.cosineWData(n,m)   =  cosineW(T.RDM(n,:),M{m}.RDM,varD); ;
+                                G=H*squareform(-0.5*T.RDM(n,:))*H'; 
+                                G=pcm_makePD(G); 
+                                varD = rsa_varianceLDC(G,C,T.sig_hat(n,:),D.numPart,D.numVox);
+                                T.cosineWData(n,m)   =  cosineW(T.RDM(n,:),M{m}.RDM,varD);
                             end; 
                         case 'fixed'
                             nRDM=bsxfun(@rdivide,T.RDM,sqrt(sum(T.RDM.^2,2)));
@@ -1227,8 +1229,11 @@ function r=cosineW(A,B,Sig); % Weighted cosine similarity measure
     % Sig: qxq variance matrix 
     % Output: 
     % N*M weighted inner product (cosineW) 
-    [V,L]=eig(Sig);   
-    l=diag(L);
+    [V,L]=eig(Sig); 
+    if (sum(imag(diag(L)))>0.001)
+        keyboard; % Should not happen if varD is correct
+    end; 
+    l=real(diag(L));
     sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
     wA=A*sq; 
     wB=B*sq; 
