@@ -839,10 +839,36 @@ switch (what)
         if (~isempty(Opt.outfile))
             save(fullfile(baseDir,Opt.outfile),'T','U');
         end;
-    case 'Figure_summarizeFiles'
+    case 'numberOfK'
+        % Simulation for systematically increasing the number of
+        % conditions to the expense of the number of measurements 
+        load Model_fiveFinger.mat; 
+        RSA_methods={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
+        TT=[]; 
+        for i=1:4 % Five different levels of 
+            fac = 2^(i-1); 
+            numCond = 5*fac; 
+            numPart = 32/fac;
+            
+            % Build the appropriate model 
+            for m=1:2 
+                MM{m}=M{m}; 
+                MM{m}.Gc = repmat(MM{m}.Gc,fac,fac); 
+                C=rsa_indicatorMatrix('allpairs',[1:numCond]); 
+                MM{m}.RDM = diag(C*MM{m}.Gc*C')'; 
+            end; 
+            [~,T]=rsa_testModelCompare('modelCompare','model',MM,'numSim',3000,...
+                'methods',RSA_methods,'Omega',0.05,'numPart',numPart);
+            T.numPart = numPart*ones(size(T.omega,1),1); 
+            T.numCond = numCond*ones(size(T.omega,1),1); 
+            TT=addstruct(TT,T);
+        end; 
+        T=TT; 
+        save sim_numberOfK_Exp1.mat T;
+        varargout={T}; 
+    case 'Util_summarizeFiles'
         ex = varargin{1};
         filesNames=varargin{2};
-        methodStr = varargin{3}; 
         T=[];
         S=[];
         D=[];
@@ -864,15 +890,16 @@ switch (what)
                 D=addstruct(D,S);
             end;
         end;
-        if (~isempty(D))
-            % Relabel the methods
-            D.method = zeros(size(D.method));
-            for i=1:length(methodStr)
-                a=strcmp(methodStr{i},D.methodStr);
-                D.method(a)=i;
-            end;
-        end;
         varargout={D};
+    case 'Util_relabelMethods'
+        D=varargin{1}; 
+        methodStr=varargin{2}; 
+        D.method = zeros(size(D.method));
+        for i=1:length(methodStr)
+            a=strcmp(methodStr{i},D.methodStr);
+            D.method(a)=i;
+        end;
+        varargout={D}; 
     case 'Figure_numReg' % This is the encoding model figure for different numbers of regressors
         cd(baseDir);
         methods={'encodeReg','encodePCM'};   %,'encodeRidge'
@@ -1019,8 +1046,9 @@ switch (what)
         CAT.linestyle={'-','-',':','-',':','-',':'};
         cd(baseDir);
         for ex=1:3
-            D=rsa_testModelCompare('Figure_summarizeFiles',ex,filesNames,methodStr);
+            D=rsa_testModelCompare('Util_summarizeFiles',ex,filesNames);
             if (~isempty(D))
+                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr); 
                 subplot(1,3,ex);
                 if (ex==1)
                     lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
@@ -1044,9 +1072,10 @@ switch (what)
                 CAT.linestyle={'-','-','--','--',':'};
         cd(baseDir);
         for ex=1:3
-            D=rsa_testModelCompare('Figure_summarizeFiles',ex,filesNames,methodStr);
+            D=rsa_testModelCompare('Util_summarizeFiles',ex,filesNames,methodStr);
 
             if (~isempty(D))
+                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr); 
                 subplot(1,3,ex);
                 if (ex==1)
                     lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
@@ -1208,6 +1237,17 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 9 5]);
         wysiwyg;
+    case 'Figure_numberOfK' 
+        load sim_numberOfK_Exp1.mat
+        methodStr={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
+        T=rsa_testModelCompare('Util_relabelMethods',T,methodStr); 
+        CAT.linecolor={'m','b','b','b','r','r','k'};
+        CAT.markercolor={'m','b','b','b','r','r','k'};
+        CAT.linewidth={2,2,2,2,2,2,1};
+        CAT.linestyle={'-',':','-','--','-','--',':'};
+        lineplot(T.numCond,T.propCorr,'split',T.method,'style_thickline',...
+                        'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',T.method>0);
+        
 end;
 
 function r=cosineW(A,B,Sig); % Weighted cosine similarity measure
