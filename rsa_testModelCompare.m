@@ -854,7 +854,7 @@ switch (what)
             for m=1:2 
                 MM{m}=M{m}; 
                 MM{m}.Gc = repmat(MM{m}.Gc,fac,fac); 
-                C=rsa_indicatorMatrix('allpairs',[1:numCond]); 
+                C=pcm_indicatorMatrix('allpairs',[1:numCond]); 
                 MM{m}.RDM = diag(C*MM{m}.Gc*C')'; 
             end; 
             [~,T]=rsa_testModelCompare('modelCompare','model',MM,'numSim',3000,...
@@ -864,7 +864,7 @@ switch (what)
             TT=addstruct(TT,T);
         end; 
         T=TT; 
-        save sim_numberOfK_Exp1.mat T;
+        save sim_numberOfK_Exp1b.mat T;
         varargout={T}; 
     case 'Util_summarizeFiles'
         ex = varargin{1};
@@ -1238,15 +1238,22 @@ switch (what)
         set(gcf,'PaperPosition',[0 0 9 5]);
         wysiwyg;
     case 'Figure_numberOfK' 
-        load sim_numberOfK_Exp1.mat
+        ex=1; 
         methodStr={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
-        T=rsa_testModelCompare('Util_relabelMethods',T,methodStr); 
         CAT.linecolor={'m','b','b','b','r','r','k'};
         CAT.markercolor={'m','b','b','b','r','r','k'};
         CAT.linewidth={2,2,2,2,2,2,1};
         CAT.linestyle={'-',':','-','--','-','--',':'};
+
+        T=[]; 
+        files=dir(sprintf('sim_numberOfK_Exp%d*',ex));
+        for i=1:length(files)
+            R=load(files(i).name);
+            T=addstruct(T,R.T); 
+        end; 
+        T=rsa_testModelCompare('Util_relabelMethods',T,methodStr); 
         lineplot(T.numCond,T.propCorr,'split',T.method,'style_thickline',...
-                        'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',T.method>0);
+              'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',T.method>0);
         
 end;
 
