@@ -1254,7 +1254,9 @@ switch (what)
         T=rsa_testModelCompare('Util_relabelMethods',T,methodStr); 
         lineplot(T.numCond,T.propCorr,'split',T.method,'style_thickline',...
               'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',T.method>0);
-        
+        set(gca,'YLim',[0.55 0.8]);
+        set(gcf,'PaperPosition',[0 0 4 4]);
+        wysiwyg;
 end;
 
 function r=cosineW(A,B,Sig); % Weighted cosine similarity measure
