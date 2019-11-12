@@ -839,33 +839,82 @@ switch (what)
         if (~isempty(Opt.outfile))
             save(fullfile(baseDir,Opt.outfile),'T','U');
         end;
-    case 'numberOfK'
+    case 'numberOfK_1'
         % Simulation for systematically increasing the number of
-        % conditions to the expense of the number of measurements 
-        load Model_fiveFinger.mat; 
+        % conditions to the expense of the number of measurements
         RSA_methods={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
-        TT=[]; 
-        for i=1:4 % Five different levels of 
-            fac = 2^(i-1); 
-            numCond = 5*fac; 
+        load Model_fiveFinger.mat;
+        nC = 5;
+        TT=[];
+        for i=1:2 % Five different levels of
+            fac = 2^(i-1);
+            numCond = nC*fac;
             numPart = 32/fac;
             
-            % Build the appropriate model 
-            for m=1:2 
-                MM{m}=M{m}; 
-                MM{m}.Gc = repmat(MM{m}.Gc,fac,fac); 
-                C=pcm_indicatorMatrix('allpairs',[1:numCond]); 
-                MM{m}.RDM = diag(C*MM{m}.Gc*C')'; 
-            end; 
-            [~,T]=rsa_testModelCompare('modelCompare','model',MM,'numSim',3000,...
+            % Build the appropriate model
+            for m=1:2
+                MM{m}=M{m};
+                MM{m}.Gc = repmat(MM{m}.Gc,fac,fac);
+                C=pcm_indicatorMatrix('allpairs',[1:numCond]);
+                MM{m}.RDM = diag(C*MM{m}.Gc*C')';
+            end;
+            [~,T]=rsa_testModelCompare('modelCompare','model',MM,'numSim',1000,...
                 'methods',RSA_methods,'Omega',0.05,'numPart',numPart);
-            T.numPart = numPart*ones(size(T.omega,1),1); 
-            T.numCond = numCond*ones(size(T.omega,1),1); 
+            T.numPart = numPart*ones(size(T.omega,1),1);
+            T.numCond = numCond*ones(size(T.omega,1),1);
             TT=addstruct(TT,T);
-        end; 
-        T=TT; 
-        save sim_numberOfK_Exp1b.mat T;
-        varargout={T}; 
+        end;
+        T=TT;
+        if (nargout==0)
+            save(sprintf('sim_numberOfK_%s.mat',expStr,'T'));
+        end;
+        varargout={T};
+    case 'numberOfK_2'
+        % Simulation for systematically increasing the number of
+        % conditions to the expense of the number of measurements
+        RSA_methods={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
+        TT=[];
+        for i=1:4 % Five different levels of
+            numItems = 2^i; % Number of items per category 
+            numCond = numItems*2;
+            numPart = 128/numCond;
+            Z = kron(eye(2),ones(numItems,1)); 
+            
+            % Build the appropriate model
+            for m=1:2
+                MM{m}.type = 'fixed'; 
+                MM{m}.numGparams= 0; 
+                MM{m}.Gc = Z*Z'+eye(numCond)*(m);
+                C=pcm_indicatorMatrix('allpairs',[1:numCond]);
+                MM{m}.RDM = diag(C*MM{m}.Gc*C')';
+            end;
+            [~,T]=rsa_testModelCompare('modelCompare','model',MM,'numSim',1000,...
+                'methods',RSA_methods,'Omega',0.01,'numPart',numPart);
+            T.numPart = numPart*ones(size(T.omega,1),1);
+            T.numCond = numCond*ones(size(T.omega,1),1);
+            TT=addstruct(TT,T);
+        end;
+        T=TT;
+        if (nargout==0)
+            save(sprintf('sim_numberOfK_%s.mat',expStr,'T'));
+        end;
+        varargout={T};
+    case 'use_intercept'
+        % M{1}.RDM = [1 2 2];
+        % M{2}.RDM = [1 4 4];
+        % M{1}.RDM = [1 2 1];
+        % M{2}.RDM = [1 4 1];
+        %M{1}.RDM = [1 2 2 2 2 1];
+        % M{2}.RDM = [1 4 4 4 4 1];
+        M{1}.RDM = [0 2 2 2 2 1];
+        M{2}.RDM = [0 4 4 4 4 1];
+        nC =4;
+        H=eye(nC)-ones(nC)/nC;
+        for i=1:2
+            M{i}.type = 'fixed';
+            M{i}.numGparams = 0;
+            M{i}.Gc = -0.5*H*squareform(M{i}.RDM)*H;
+        end;
     case 'Util_summarizeFiles'
         ex = varargin{1};
         filesNames=varargin{2};
@@ -892,14 +941,14 @@ switch (what)
         end;
         varargout={D};
     case 'Util_relabelMethods'
-        D=varargin{1}; 
-        methodStr=varargin{2}; 
+        D=varargin{1};
+        methodStr=varargin{2};
         D.method = zeros(size(D.method));
         for i=1:length(methodStr)
             a=strcmp(methodStr{i},D.methodStr);
             D.method(a)=i;
         end;
-        varargout={D}; 
+        varargout={D};
     case 'Figure_numReg' % This is the encoding model figure for different numbers of regressors
         cd(baseDir);
         methods={'encodeReg','encodePCM'};   %,'encodeRidge'
@@ -1048,7 +1097,7 @@ switch (what)
         for ex=1:3
             D=rsa_testModelCompare('Util_summarizeFiles',ex,filesNames);
             if (~isempty(D))
-                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr); 
+                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr);
                 subplot(1,3,ex);
                 if (ex==1)
                     lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
@@ -1066,16 +1115,16 @@ switch (what)
     case 'Figure_rsa_weight'
         filesNames={'rsan','pcm'};
         methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
-                CAT.linecolor={'b','r','b','r','k'};
-                CAT.markercolor={'b','r','b','r','k'};
-                CAT.linewidth={2,2,2,2,1};
-                CAT.linestyle={'-','-','--','--',':'};
+        CAT.linecolor={'b','r','b','r','k'};
+        CAT.markercolor={'b','r','b','r','k'};
+        CAT.linewidth={2,2,2,2,1};
+        CAT.linestyle={'-','-','--','--',':'};
         cd(baseDir);
         for ex=1:3
             D=rsa_testModelCompare('Util_summarizeFiles',ex,filesNames,methodStr);
-
+            
             if (~isempty(D))
-                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr); 
+                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr);
                 subplot(1,3,ex);
                 if (ex==1)
                     lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
@@ -1237,23 +1286,23 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 9 5]);
         wysiwyg;
-    case 'Figure_numberOfK' 
-        ex=1; 
+    case 'Figure_numberOfK'
+        ex=1;
         methodStr={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
         CAT.linecolor={'m','b','b','b','r','r','k'};
         CAT.markercolor={'m','b','b','b','r','r','k'};
         CAT.linewidth={2,2,2,2,2,2,1};
         CAT.linestyle={'-',':','-','--','-','--',':'};
-
-        T=[]; 
+        
+        T=[];
         files=dir(sprintf('sim_numberOfK_Exp%d*',ex));
         for i=1:length(files)
             R=load(files(i).name);
-            T=addstruct(T,R.T); 
-        end; 
-        T=rsa_testModelCompare('Util_relabelMethods',T,methodStr); 
+            T=addstruct(T,R.T);
+        end;
+        T=rsa_testModelCompare('Util_relabelMethods',T,methodStr);
         lineplot(T.numCond,T.propCorr,'split',T.method,'style_thickline',...
-              'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',T.method>0);
+            'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',T.method>0);
         set(gca,'YLim',[0.55 0.8]);
         set(gcf,'PaperPosition',[0 0 4 4]);
         wysiwyg;
