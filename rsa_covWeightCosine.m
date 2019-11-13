@@ -1,4 +1,4 @@
-function r=rsa_covWeightCosine(A,B,removeInt) % Covariance-Weighted cosine similarity measure 
+function [r,preW]=rsa_covWeightCosine(A,B,removeInt) % Covariance-Weighted cosine similarity measure 
 % function r=rsa_covWEightCosine(A,B,removeInt); 
 % Covariance-Weighted cosine similarity measure between distances 
 % INPUT: 
@@ -39,3 +39,4 @@ end;
 wA=bsxfun(@rdivide,wA,sqrt(sum(wA.^2,2)));
 wB=bsxfun(@rdivide,wB,sqrt(sum(wB.^2,2)));
 r=wA*wB';
+preW=sq; 

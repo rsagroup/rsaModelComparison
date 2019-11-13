@@ -1306,6 +1306,46 @@ switch (what)
         set(gca,'YLim',[0.55 0.8]);
         set(gcf,'PaperPosition',[0 0 4 4]);
         wysiwyg;
+    case 'predict_bestMethods' % fast way to approximate which method will work better... 
+        N=10000; 
+        M=varargin{1}; % cell array of the two models to compare
+        noise = 0.1; % Noise variance on distances (under the null) 
+        numPart=5; % Number of partitions
+        vararginoptions(varargin(2:end),{'noise','numPart'}); 
+        K = size(squareform(M{1}.RDM)); 
+        C=pcm_indicatorMatrix('allpairs',[1:K]); 
+        CC = C*C';
+        Var= CC.*CC/4; 
+        A = cholcov(Var); 
+        [V,L]=eig(Var); 
+        l=real(diag(L));
+        sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
+    
+        model = [M{1}.RDM;M{2}.RDM]; 
+        for i=1:2
+            raw   = normrnd(0,1,N,size(M{1}.RDM,2));
+
+            % Non-Crossvalidated 
+            epsilon = raw * A * sqrt(noise);
+            data = bsxfun(@plus,epsilon,M{i}.RDM); 
+            r{1}=corr((data)',model'); 
+            r{2}=corr((data*sq)',(model*sq)'); 
+
+            % Crossvalidated
+            epsilon = raw * A * sqrt(noise*(numPart/(numPart-1)));
+            data = bsxfun(@plus,epsilon,M{i}.RDM); 
+            r{3}=corrN((data)',model'); 
+            r{4}=corrN((data*sq)',(model*sq)'); 
+            
+            tM = i; 
+            fM = 3-i; 
+            
+            for j=1:4 
+                correct(j,i)=sum(r{j}(:,tM)>r{j}(:,fM))+0.5*sum(r{j}(:,tM)==r{j}(:,fM)); 
+            end; 
+        end; 
+        correct = mean(correct/N,2); 
+        varargout={correct}; 
 end;
 
 function r=cosineW(A,B,Sig); % Weighted cosine similarity measure
