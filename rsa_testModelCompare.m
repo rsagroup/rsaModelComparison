@@ -54,6 +54,23 @@ switch (what)
             M(i).RDM=M(i).RDM./sqrt(sum(M(i).RDM.^2));
         end;
         save(fullfile(baseDir,'START_compl.mat'),'M');
+    case 'make2CatModel'
+        % Builds category model with n1 items in category 1 and n2 items in
+        % category 2. The difference withing category is 1 and between categories 1 + betweenD
+        N = [4 4]; 
+        individVar = [1 1];
+        commonVar = [1 1]; 
+        vararginoptions(varargin,{'N','individVar','commonVar'}); 
+        Z = [[ones(N(1),1) zeros(N(1),1)]*sqrt(commonVar(1));...
+             [zeros(N(2),1) ones(N(2),1)]*sqrt(commonVar(2))]; 
+            
+            % Build the appropriate model
+        M.type = 'fixed'; 
+        M.numGparams= 0; 
+        M.Gc = Z*Z'+blockdiag(eye(N(1))*individVar(1),eye(N(2))*individVar(2));
+        C=pcm_indicatorMatrix('allpairs',[1:sum(N)]);
+        M.RDM = diag(C*M.Gc*C')';
+        varargout={M};
     case 'evaluateSubspace' % Looks at the subspace overlap of models in terms of their principal components
         M=varargin{1};
         
@@ -878,16 +895,6 @@ switch (what)
             numItems = 2^i; % Number of items per category 
             numCond = numItems*2;
             numPart = 128/numCond;
-            Z = kron(eye(2),ones(numItems,1)); 
-            
-            % Build the appropriate model
-            for m=1:2
-                MM{m}.type = 'fixed'; 
-                MM{m}.numGparams= 0; 
-                MM{m}.Gc = Z*Z'+eye(numCond)*(m);
-                C=pcm_indicatorMatrix('allpairs',[1:numCond]);
-                MM{m}.RDM = diag(C*MM{m}.Gc*C')';
-            end;
             [~,T]=rsa_testModelCompare('modelCompare','model',MM,'numSim',1000,...
                 'methods',RSA_methods,'Omega',0.01,'numPart',numPart);
             T.numPart = numPart*ones(size(T.omega,1),1);
@@ -1318,10 +1325,16 @@ switch (what)
         Var= CC.*CC/4; 
         A = cholcov(Var); 
         [V,L]=eig(Var); 
+                
         l=real(diag(L));
         sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
     
-        model = [M{1}.RDM;M{2}.RDM]; 
+        model = [M{1}.RDM/mean(M{1}.RDM);M{2}.RDM/mean(M{2}.RDM)]; 
+        
+        % Check the projection of the models on the modes
+        p=model*V;
+        [l';p]
+        
         for i=1:2
             raw   = normrnd(0,1,N,size(M{1}.RDM,2));
 
