@@ -1318,7 +1318,7 @@ switch (what)
         M=varargin{1}; % cell array of the two models to compare
         noise = 0.1; % Noise variance on distances (under the null) 
         numPart=5; % Number of partitions
-        vararginoptions(varargin(2:end),{'noise','numPart'}); 
+        vararginoptions(varargin(2:end),{'noise','numPart','N'}); 
         K = size(squareform(M{1}.RDM)); 
         C=pcm_indicatorMatrix('allpairs',[1:K]); 
         CC = C*C';
@@ -1328,13 +1328,17 @@ switch (what)
                 
         l=real(diag(L));
         sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
-    
-        model = [M{1}.RDM/mean(M{1}.RDM);M{2}.RDM/mean(M{2}.RDM)]; 
-        
-        % Check the projection of the models on the modes
+            
+        % Check the projection of the models 1 
+        model = [M{1}.RDM-mean(M{1}.RDM);M{2}.RDM-mean(M{2}.RDM)]; 
         p=model*V;
         [l';p]
-        
+
+        % Check the projection of the models 1 
+        model = [M{1}.RDM/sqrt(sum(M{1}.RDM.^2));M{2}.RDM/sqrt(sum(M{2}.RDM.^2))]; 
+        p=model*V;
+        [l';p]
+
         for i=1:2
             raw   = normrnd(0,1,N,size(M{1}.RDM,2));
 
@@ -1354,11 +1358,64 @@ switch (what)
             fM = 3-i; 
             
             for j=1:4 
+                r{j}=round(r{j},5); 
                 correct(j,i)=sum(r{j}(:,tM)>r{j}(:,fM))+0.5*sum(r{j}(:,tM)==r{j}(:,fM)); 
             end; 
         end; 
         correct = mean(correct/N,2); 
         varargout={correct}; 
+    case 'Figure_crossval_noncrossval'
+        CAT.linecolor={'b','r','b','r'};
+        CAT.markercolor={'b','r','b','r'};
+        CAT.linewidth={2,2,2,2};
+        CAT.linestyle={'-','-','--','--'};
+        K=4; 
+        numPart=[2 3 4 5 6 8 10 12]; 
+        noise =[0.25 0.4 0.8]; 
+        ymin = [0.45 0.55 0.55];         
+        ymax = [0.65 0.75 0.75]; 
+        H=eye(K)-ones(K)/K; 
+        C=indicatorMatrix('allpairs',[1:K]); 
+        V=((C*C').^2)/2; 
+        [E,l]=eig(V);
+        M{1}=rsa_testModelCompare('make2CatModel','N',[3 3]);
+        M{2}=rsa_testModelCompare('make2CatModel','N',[3 3],'commonVar',[2 2]);
+        for i=1:3 
+            switch(i)
+                case 1
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';
+                    M{2}.RDM=[0 -0.2 0 0 0 1]*E';
+                case 2 
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';
+                    M{2}.RDM=[0.1 0 0 0 0 1]*E';
+                case 3 
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';
+                    M{2}.RDM=[0  0  0.5 0 0 1]*E';
+            end; 
+            for j=1:length(numPart) 
+                Correct(j,:)=rsa_testModelCompare('predict_bestMethods',M,...
+                    'numPart',numPart(j),'noise',noise(i),'N',500000); 
+            end; 
+            figure(1); 
+            subplot(1,3,i); 
+            lineplot(numPart',Correct(:,[2 4]),'CAT',CAT,'errorfcn',[]);
+            set(gca,'YLim',[ymin(i) ymax(i)]); 
+            figure(2); 
+            for m=1:2 
+                subplot(2,3,(m-1)*3+i); 
+                D=squareform(M{m}.RDM); 
+                imagesc_rectangle(D,'YDir','reverse'); 
+                set(gca,'YTick',[],'XTick',[]); 
+                axis equal; 
+            end; 
+        end; 
+        figure(1); 
+        set(gcf,'PaperPosition',[2 2 10 3]); 
+        wysiwyg; 
+        figure(2); 
+        set(gcf,'PaperPosition',[2 2 8 5]); 
+        wysiwyg; 
+        
 end;
 
 function r=cosineW(A,B,Sig); % Weighted cosine similarity measure
