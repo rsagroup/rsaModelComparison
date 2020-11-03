@@ -78,6 +78,31 @@ switch(what)
         
         y=Z*trueU+err;
         varargout={y,trueU};
+    case 'scalar_test'          % Test for the formula for the cov(xy,uv) 
+        M = [1 2 1.1 0.3]; 
+        Sig  = [1 0.5 0.3 0.1;0.5 1.2 0.2 0.05;0.3 0.2 1.3 0.7;0.1 0.05 0.7 1.5]; 
+        A    = cholcov(Sig);
+        Y = bsxfun(@plus,normrnd(0,1,10000000,4)*A,M);
+        X = [Y(:,1).*Y(:,2) Y(:,3).*Y(:,4)]; 
+        
+        mean_hat = [M(1)*M(2)+Sig(1,2) M(3)*M(4)+Sig(3,4)]; 
+        var_hat = [M(1)^2*Sig(2,2) + M(2)^2*Sig(1,1) + 2*M(1)*M(2)*Sig(1,2) + Sig(1,1)*Sig(2,2) + Sig(1,2)^2 ...
+                   M(3)^2*Sig(4,4) + M(4)^2*Sig(3,3) + 2*M(3)*M(4)*Sig(3,4) + Sig(3,3)*Sig(4,4) + Sig(3,4)^2]; 
+        cov_hat = M(1)*M(3)*Sig(2,4) + M(1)*M(4)*Sig(2,3) + ...
+                  M(2)*M(3)*Sig(1,4) + M(2)*M(4)*Sig(1,3) + ...
+                  Sig(1,3)*Sig(2,4) + Sig(1,4)*Sig(2,3);         
+        fprintf('mean:\n'); 
+        fprintf('predicted %2.2f %2.2f\n',mean_hat(1),mean_hat(2));
+        fprintf('measured  %2.2f %2.2f\n',mean(X(:,1)),mean(X(:,2)));
+        fprintf('variance:\n'); 
+        fprintf('predicted %2.2f %2.2f\n',var_hat(1),var_hat(2));
+        fprintf('measured  %2.2f %2.2f\n',var(X(:,1)),var(X(:,2)));
+        fprintf('covariance:\n'); 
+        fprintf('predicted %2.4f \n',cov_hat);
+        C=cov(X);
+        fprintf('measured  %2.4f \n',C(1,2));
+        
+        
     case 'vector_test'          % Test for the properties of the inner product between two vectors <x,y>
         % Case of indepdent vectors
         Mean=[0 0];

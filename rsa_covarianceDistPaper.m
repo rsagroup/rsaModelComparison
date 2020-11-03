@@ -11,7 +11,7 @@ import rsa.stat.*;
 import rsa.rdm.*;
 
 % Determine color maps for RDM displays 
-cmapRDM = bone; 
+cmapRDM = flipud(bone); 
 cmapCov = hot; 
 
 %  Make the representational model matrices from features
@@ -103,13 +103,62 @@ switch (what)
     case 'Figure1'                     % Figure 1: RDMs
         G=diag([2 1 0 0 0]); 
         nC =5;
+        numVox = 20; 
         H=eye(nC)-ones(nC)/nC;
         C=indicatorMatrix('allpairs',[1:nC]); 
         G = H*G*H; 
-        D = diag(C*G*C'); 
-        
+        d = (diag(C*G*C')); 
+        D = squareform(d);
+        covD = rsa_varianceLDC(d,C,1,5,10); 
+        U=mvnrnd(zeros(nC,1),G,numVox)'+normrnd(0,0.5,5,numVox); 
+        Gemp = H*U*U'*H'/numVox; 
+        demp = (diag(C*Gemp*C')); 
+        Demp = squareform(demp);
+        scm=max([D(:);Demp(:)]); 
+        subplot(1,2,1); 
+        imagesc_rectangle(D,'YDir','reverse','scale',[0 scm],'MAP',cmapRDM); 
+        axis equal; 
+        set(gca,'YTick',[],'XTick',[]); 
+        subplot(1,2,2); 
+        imagesc_rectangle(Demp,'YDir','reverse','scale',[0 scm],'MAP',cmapRDM); 
+        axis equal; 
+        set(gca,'YTick',[],'XTick',[]); 
     case 'Figure_variancebias'         % Figure 2: Variance-bias plots 
     case 'Figure_covariances'          % Figure 2: Covariance matrices 
+        
+        figure;
+        sc = [0 0.14]; 
+        subplot(2,3,1); 
+        G=diag([0 0 0 0 0]); 
+        nC =5;
+        H=eye(nC)-ones(nC)/nC;
+        C=indicatorMatrix('allpairs',[1:nC]); 
+        d = (diag(C*G*C')); 
+        D = squareform(d);
+        covD = rsa_varianceLDC(d,C,1,8,10); 
+        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc); 
+        axis equal; 
+        set(gca,'YTick',[],'XTick',[]); 
+                
+        subplot(2,3,4); 
+        G=diag([1 0.5 0 0 0])/20; 
+        d = (diag(C*G*C')); 
+        D = squareform(d);
+        covD = rsa_varianceLDC(d,C,1,8,10); 
+        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc); 
+        axis equal; 
+        set(gca,'YTick',[],'XTick',[]); 
+        
+        subplot(2,3,[2 3 5 6]); % 20 distance Figure 
+        nC =20;
+        colormap(cmapCov); 
+        C=indicatorMatrix('allpairs',[1:nC]); 
+        covD = rsa_varianceLDC(zeros(size(C,1),1),C,1,8,10); 
+        imagesc(sqrt(covD),sc); 
+        axis equal; 
+        set(gca,'YTick',[],'XTick',[]); 
+        
+        
     case 'Figure_rsa_pcm'
         filesNames={'rsa','pcm'};
         cd(baseDir);
@@ -273,7 +322,7 @@ switch (what)
         end; 
         correct = mean(correct/N,2); 
         varargout={correct}; 
-    case 'Figure_crossval_noncrossval' % Figure 5 
+    case 'Figure_crossval_noncrossval' % Figure 4 
         CAT.linecolor={'b','r','b','r'};
         CAT.markercolor={'b','r','b','r'};
         CAT.linewidth={2,2,2,2};
@@ -307,13 +356,14 @@ switch (what)
             end; 
             figure(1); 
             subplot(1,3,i); 
-            lineplot(numPart',Correct(:,[2 4]),'CAT',CAT,'errorfcn',[]);
+            lineplot(numPart',Correct(:,[1 3]),'CAT',CAT,'errorfcn',[]);
             set(gca,'YLim',[ymin(i) ymax(i)]); 
             figure(2); 
             for m=1:2 
                 subplot(2,3,(m-1)*3+i); 
                 D=squareform(M{m}.RDM); 
-                imagesc_rectangle(D,'YDir','reverse'); 
+                mD = max(D(:))*1.4; 
+                imagesc_rectangle(D,'YDir','reverse','MAP',cmapRDM,'scale',[0 mD]); 
                 set(gca,'YTick',[],'XTick',[]); 
                 axis equal; 
             end; 
