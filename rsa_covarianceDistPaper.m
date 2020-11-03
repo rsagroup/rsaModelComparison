@@ -123,9 +123,8 @@ switch (what)
         imagesc_rectangle(Demp,'YDir','reverse','scale',[0 scm],'MAP',cmapRDM); 
         axis equal; 
         set(gca,'YTick',[],'XTick',[]); 
-    case 'Figure_variancebias'         % Figure 2: Variance-bias plots 
-    case 'Figure_covariances'          % Figure 2: Covariance matrices 
-        
+    case 'Figure_variancebias'         % Figure 3: Variance-bias plots 
+    case 'Figure_covariances'          % Figure 5: Covariance matrices   
         figure;
         sc = [0 0.14]; 
         subplot(2,3,1); 
@@ -157,8 +156,6 @@ switch (what)
         imagesc(sqrt(covD),sc); 
         axis equal; 
         set(gca,'YTick',[],'XTick',[]); 
-        
-        
     case 'Figure_rsa_pcm'
         filesNames={'rsa','pcm'};
         cd(baseDir);
@@ -224,7 +221,7 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
-    case 'Figure_rsa_weight'           % Figure 3         
+    case 'Figure_rsa_weight'           % Figure 6        
         filesNames={'rsan','pcm'};
         methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
         CAT.linecolor={'b','r','b','r','k'};
@@ -251,7 +248,7 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
-    case 'Figure_numberOfK'            % Figure 4
+    case 'Figure_numberOfK'            % Figure 7
         ex=1;
         methodStr={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
         CAT.linecolor={'m','b','b','b','r','r','k'};
@@ -279,8 +276,13 @@ switch (what)
         vararginoptions(varargin(2:end),{'noise','numPart','N'}); 
         K = size(squareform(M{1}.RDM)); 
         C=pcm_indicatorMatrix('allpairs',[1:K]); 
-        CC = C*C';
-        Var= CC.*CC/4; 
+        
+        if (isscalar(noise))
+            noise = noise * eye(K); 
+        end; 
+
+        XiM = C*noise*C';
+        Var= XiM.*XiM/4; 
         A = cholcov(Var); 
         [V,L]=eig(Var); 
                 
@@ -290,12 +292,12 @@ switch (what)
         % Check the projection of the models 1 
         model = [M{1}.RDM-mean(M{1}.RDM);M{2}.RDM-mean(M{2}.RDM)]; 
         p=model*V;
-        [l';p]
+        % [l';p]
 
         % Check the projection of the models 1 
         model = [M{1}.RDM/sqrt(sum(M{1}.RDM.^2));M{2}.RDM/sqrt(sum(M{2}.RDM.^2))]; 
         p=model*V;
-        [l';p]
+        % [l';p]
 
         for i=1:2
             raw   = normrnd(0,1,N,size(M{1}.RDM,2));
@@ -329,38 +331,45 @@ switch (what)
         CAT.linestyle={'-','-','--','--'};
         K=4; 
         numPart=[2 3 4 5 6 8 10 12]; 
-        noise =[0.25 0.4 0.8]; 
-        ymin = [0.45 0.55 0.55];         
-        ymax = [0.65 0.75 0.75]; 
+        noise = {0.25,0.25,0.4,0.8}; 
+        ymin = [0 0.45 0.55 0.55];         
+        ymax = [1 0.65 0.75 0.75]; 
         H=eye(K)-ones(K)/K; 
         C=indicatorMatrix('allpairs',[1:K]); 
         V=((C*C').^2)/2; 
-        [E,l]=eig(V);
-        M{1}=rsa_covarianceDistPaper('make2CatModel','N',[3 3]);
-        M{2}=rsa_covarianceDistPaper('make2CatModel','N',[3 3],'commonVar',[2 2]);
-        for i=1:3 
+        [E,l]=eig(V);  % E are the eigenvalues of the variance-covariance matrix 
+        for i=1:4 
             switch(i)
                 case 1
                     M{1}.RDM=[0 -0.5 0 0 0 1]*E';
+                    a = M{1}.RDM(1); 
+                    b = M{1}.RDM(2); 
+                    M{2}.RDM=[b a b b a b];
+                case 2
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';  % Differs in the size of one component
                     M{2}.RDM=[0 -0.2 0 0 0 1]*E';
-                case 2 
-                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';
-                    M{2}.RDM=[0.1 0 0 0 0 1]*E';
                 case 3 
-                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';  
+                    M{2}.RDM=[0.1 0 0 0 0 1]*E';
+                case 4 
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';  % Differs in sign on independent components 
                     M{2}.RDM=[0  0  0.5 0 0 1]*E';
             end; 
+            for j=1:2 
+                M{j}.Gc = -0.5*H*squareform(M{j}.RDM)*H;
+            end
+            
             for j=1:length(numPart) 
                 Correct(j,:)=rsa_covarianceDistPaper('predict_bestMethods',M,...
-                    'numPart',numPart(j),'noise',noise(i),'N',500000); 
+                    'numPart',numPart(j),'noise',noise{i},'N',1000); 
             end; 
             figure(1); 
-            subplot(1,3,i); 
+            subplot(1,4,i); 
             lineplot(numPart',Correct(:,[1 3]),'CAT',CAT,'errorfcn',[]);
             set(gca,'YLim',[ymin(i) ymax(i)]); 
             figure(2); 
             for m=1:2 
-                subplot(2,3,(m-1)*3+i); 
+                subplot(2,4,(m-1)*4+i); 
                 D=squareform(M{m}.RDM); 
                 mD = max(D(:))*1.4; 
                 imagesc_rectangle(D,'YDir','reverse','MAP',cmapRDM,'scale',[0 mD]); 
