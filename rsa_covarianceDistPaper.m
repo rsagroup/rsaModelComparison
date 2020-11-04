@@ -270,10 +270,11 @@ switch (what)
         wysiwyg;
     case 'predict_bestMethods' % fast way to approximate which method will work better... 
         N=10000; 
-        M=varargin{1}; % cell array of the two models to compare
-        noise = 0.1; % Noise variance on distances (under the null) 
-        numPart=5; % Number of partitions
-        vararginoptions(varargin(2:end),{'noise','numPart','N'}); 
+        M=varargin{1};  % cell array of the two models to compare
+        noise = 0.1;    % Noise variance on distances (under the null) 
+        numPart=5;      % Number of partitions
+        P = 20;         % Number of voxels 
+        vararginoptions(varargin(2:end),{'noise','numPart','N','P'}); 
         K = size(squareform(M{1}.RDM)); 
         C=pcm_indicatorMatrix('allpairs',[1:K]); 
         
@@ -282,7 +283,7 @@ switch (what)
         end; 
 
         XiM = C*noise*C';
-        Var= XiM.*XiM/4; 
+        Var= 2/P * XiM.*XiM; 
         A = cholcov(Var); 
         [V,L]=eig(Var); 
                 
@@ -303,13 +304,14 @@ switch (what)
             raw   = normrnd(0,1,N,size(M{1}.RDM,2));
 
             % Non-Crossvalidated 
-            epsilon = raw * A * sqrt(noise);
+            epsilon = raw * A ;
             data = bsxfun(@plus,epsilon,M{i}.RDM); 
+            data = bsxfun(@plus,data,diag(XiM)'); % Add the bias  
             r{1}=corr((data)',model'); 
             r{2}=corr((data*sq)',(model*sq)'); 
 
             % Crossvalidated
-            epsilon = raw * A * sqrt(noise*(numPart/(numPart-1)));
+            epsilon = raw * A * sqrt(numPart/(numPart-1)); % Inflation of noise 
             data = bsxfun(@plus,epsilon,M{i}.RDM); 
             r{3}=corrN((data)',model'); 
             r{4}=corrN((data*sq)',(model*sq)'); 
@@ -320,10 +322,12 @@ switch (what)
             for j=1:4 
                 r{j}=round(r{j},5); 
                 correct(j,i)=sum(r{j}(:,tM)>r{j}(:,fM))+0.5*sum(r{j}(:,tM)==r{j}(:,fM)); 
+                model2(j,i)=sum(r{j}(:,2)>r{j}(:,1))+0.5*sum(r{j}(:,1)==r{j}(:,2)); 
             end; 
         end; 
         correct = mean(correct/N,2); 
-        varargout={correct}; 
+        model2 = mean(model2/N,2); 
+        varargout={correct,model2}; 
     case 'Figure_crossval_noncrossval' % Figure 4 
         CAT.linecolor={'b','r','b','r'};
         CAT.markercolor={'b','r','b','r'};
@@ -331,9 +335,11 @@ switch (what)
         CAT.linestyle={'-','-','--','--'};
         K=4; 
         numPart=[2 3 4 5 6 8 10 12]; 
-        noise = {0.25,0.25,0.4,0.8}; 
-        ymin = [0 0.45 0.55 0.55];         
-        ymax = [1 0.65 0.75 0.75]; 
+        c = 0.15; 
+        noise1 = [1 c 0 0;c 1 c 0;0 c 1 c;0 0 c 1]*1.3; 
+        noise = {noise1,0.5,1,1.2}; 
+        ymin = [0.5 0.4 0.5 0.5];         
+        ymax = [0.8 0.7 0.8 0.8]; 
         H=eye(K)-ones(K)/K; 
         C=indicatorMatrix('allpairs',[1:K]); 
         V=((C*C').^2)/2; 
@@ -360,13 +366,19 @@ switch (what)
             end
             
             for j=1:length(numPart) 
-                Correct(j,:)=rsa_covarianceDistPaper('predict_bestMethods',M,...
+                [Correct(j,:),Model2(j,:)]=rsa_covarianceDistPaper('predict_bestMethods',M,...
                     'numPart',numPart(j),'noise',noise{i},'N',1000); 
             end; 
             figure(1); 
-            subplot(1,4,i); 
+            subplot(2,4,i); 
             lineplot(numPart',Correct(:,[1 3]),'CAT',CAT,'errorfcn',[]);
             set(gca,'YLim',[ymin(i) ymax(i)]); 
+            drawline(0.5,'dir','horz'); 
+            subplot(2,4,i+4); 
+            lineplot(numPart',Model2(:,[1 3]),'CAT',CAT,'errorfcn',[]);
+            set(gca,'YLim',[0.2 0.7]);
+            drawline(0.5,'dir','horz'); 
+            
             figure(2); 
             for m=1:2 
                 subplot(2,4,(m-1)*4+i); 
