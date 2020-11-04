@@ -1,7 +1,7 @@
 function varargout=rsa_covarianceDistPaper(what,varargin)
-% Function that produces simulations and Figures for the paper 
+% Function that produces simulations and Figures for the paper
 % "Comparing representational geometries: How to deal with bias and
-% covariance of dissimilarity measures" 
+% covariance of dissimilarity measures"
 baseDir = '/Users/jdiedrichsen/Dropbox (Diedrichsenlab)/Projects/modelCompare';
 
 % Use develop branch of the RSA toolbox
@@ -10,9 +10,9 @@ import rsa.util.*;
 import rsa.stat.*;
 import rsa.rdm.*;
 
-% Determine color maps for RDM displays 
-cmapRDM = flipud(bone); 
-cmapCov = hot; 
+% Determine color maps for RDM displays
+cmapRDM = flipud(bone);
+cmapCov = hot;
 
 %  Make the representational model matrices from features
 switch (what)
@@ -20,16 +20,16 @@ switch (what)
     case 'make2CatModel'
         % Builds category model with n1 items in category 1 and n2 items in
         % category 2. The difference withing category is 1 and between categories 1 + betweenD
-        N = [4 4]; 
+        N = [4 4];
         individVar = [1 1];
-        commonVar = [1 1]; 
-        vararginoptions(varargin,{'N','individVar','commonVar'}); 
+        commonVar = [1 1];
+        vararginoptions(varargin,{'N','individVar','commonVar'});
         Z = [[ones(N(1),1) zeros(N(1),1)]*sqrt(commonVar(1));...
-             [zeros(N(2),1) ones(N(2),1)]*sqrt(commonVar(2))]; 
-            
-            % Build the appropriate model
-        M.type = 'fixed'; 
-        M.numGparams= 0; 
+            [zeros(N(2),1) ones(N(2),1)]*sqrt(commonVar(2))];
+        
+        % Build the appropriate model
+        M.type = 'fixed';
+        M.numGparams= 0;
         M.Gc = Z*Z'+blockdiag(eye(N(1))*individVar(1),eye(N(2))*individVar(2));
         C=pcm_indicatorMatrix('allpairs',[1:sum(N)]);
         M.RDM = diag(C*M.Gc*C')';
@@ -70,7 +70,7 @@ switch (what)
         RSA_methods={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
         TT=[];
         for i=1:4 % Five different levels of
-            numItems = 2^i; % Number of items per category 
+            numItems = 2^i; % Number of items per category
             numCond = numItems*2;
             numPart = 128/numCond;
             [~,T]=rsa_testModelCompare('modelCompare','model',MM,'numSim',1000,...
@@ -101,61 +101,61 @@ switch (what)
             M{i}.Gc = -0.5*H*squareform(M{i}.RDM)*H;
         end;
     case 'Figure1'                     % Figure 1: RDMs
-        G=diag([2 1 0 0 0]); 
+        G=diag([2 1 0 0 0]);
         nC =5;
-        numVox = 20; 
+        numVox = 20;
         H=eye(nC)-ones(nC)/nC;
-        C=indicatorMatrix('allpairs',[1:nC]); 
-        G = H*G*H; 
-        d = (diag(C*G*C')); 
+        C=indicatorMatrix('allpairs',[1:nC]);
+        G = H*G*H;
+        d = (diag(C*G*C'));
         D = squareform(d);
-        covD = rsa_varianceLDC(d,C,1,5,10); 
-        U=mvnrnd(zeros(nC,1),G,numVox)'+normrnd(0,0.5,5,numVox); 
-        Gemp = H*U*U'*H'/numVox; 
-        demp = (diag(C*Gemp*C')); 
+        covD = rsa_varianceLDC(d,C,1,5,10);
+        U=mvnrnd(zeros(nC,1),G,numVox)'+normrnd(0,0.5,5,numVox);
+        Gemp = H*U*U'*H'/numVox;
+        demp = (diag(C*Gemp*C'));
         Demp = squareform(demp);
-        scm=max([D(:);Demp(:)]); 
-        subplot(1,2,1); 
-        imagesc_rectangle(D,'YDir','reverse','scale',[0 scm],'MAP',cmapRDM); 
-        axis equal; 
-        set(gca,'YTick',[],'XTick',[]); 
-        subplot(1,2,2); 
-        imagesc_rectangle(Demp,'YDir','reverse','scale',[0 scm],'MAP',cmapRDM); 
-        axis equal; 
-        set(gca,'YTick',[],'XTick',[]); 
-    case 'Figure_variancebias'         % Figure 3: Variance-bias plots 
-    case 'Figure_covariances'          % Figure 5: Covariance matrices   
+        scm=max([D(:);Demp(:)]);
+        subplot(1,2,1);
+        imagesc_rectangle(D,'YDir','reverse','scale',[0 scm],'MAP',cmapRDM);
+        axis equal;
+        set(gca,'YTick',[],'XTick',[]);
+        subplot(1,2,2);
+        imagesc_rectangle(Demp,'YDir','reverse','scale',[0 scm],'MAP',cmapRDM);
+        axis equal;
+        set(gca,'YTick',[],'XTick',[]);
+    case 'Figure_variancebias'         % Figure 3: Variance-bias plots
+    case 'Figure_covariances'          % Figure 5: Covariance matrices
         figure;
-        sc = [0 0.14]; 
-        subplot(2,3,1); 
-        G=diag([0 0 0 0 0]); 
+        sc = [0 0.14];
+        subplot(2,3,1);
+        G=diag([0 0 0 0 0]);
         nC =5;
         H=eye(nC)-ones(nC)/nC;
-        C=indicatorMatrix('allpairs',[1:nC]); 
-        d = (diag(C*G*C')); 
+        C=indicatorMatrix('allpairs',[1:nC]);
+        d = (diag(C*G*C'));
         D = squareform(d);
-        covD = rsa_varianceLDC(d,C,1,8,10); 
-        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc); 
-        axis equal; 
-        set(gca,'YTick',[],'XTick',[]); 
-                
-        subplot(2,3,4); 
-        G=diag([1 0.5 0 0 0])/20; 
-        d = (diag(C*G*C')); 
-        D = squareform(d);
-        covD = rsa_varianceLDC(d,C,1,8,10); 
-        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc); 
-        axis equal; 
-        set(gca,'YTick',[],'XTick',[]); 
+        covD = rsa_varianceLDC(d,C,1,8,10);
+        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc);
+        axis equal;
+        set(gca,'YTick',[],'XTick',[]);
         
-        subplot(2,3,[2 3 5 6]); % 20 distance Figure 
+        subplot(2,3,4);
+        G=diag([1 0.5 0 0 0])/20;
+        d = (diag(C*G*C'));
+        D = squareform(d);
+        covD = rsa_varianceLDC(d,C,1,8,10);
+        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc);
+        axis equal;
+        set(gca,'YTick',[],'XTick',[]);
+        
+        subplot(2,3,[2 3 5 6]); % 20 distance Figure
         nC =20;
-        colormap(cmapCov); 
-        C=indicatorMatrix('allpairs',[1:nC]); 
-        covD = rsa_varianceLDC(zeros(size(C,1),1),C,1,8,10); 
-        imagesc(sqrt(covD),sc); 
-        axis equal; 
-        set(gca,'YTick',[],'XTick',[]); 
+        colormap(cmapCov);
+        C=indicatorMatrix('allpairs',[1:nC]);
+        covD = rsa_varianceLDC(zeros(size(C,1),1),C,1,8,10);
+        imagesc(sqrt(covD),sc);
+        axis equal;
+        set(gca,'YTick',[],'XTick',[]);
     case 'Figure_rsa_pcm'
         filesNames={'rsa','pcm'};
         cd(baseDir);
@@ -221,7 +221,7 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
-    case 'Figure_rsa_weight'           % Figure 6        
+    case 'Figure_rsa_weight'           % Figure 6
         filesNames={'rsan','pcm'};
         methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
         CAT.linecolor={'b','r','b','r','k'};
@@ -268,134 +268,219 @@ switch (what)
         set(gca,'YLim',[0.55 0.8]);
         set(gcf,'PaperPosition',[0 0 4 4]);
         wysiwyg;
-    case 'predict_bestMethods' % fast way to approximate which method will work better... 
-        N=10000; 
+    case 'predict_bestMethods' % fast way to approximate which method will work better...
+        N=10000;
         M=varargin{1};  % cell array of the two models to compare
-        noise = 0.1;    % Noise variance on distances (under the null) 
+        noise = 0.1;    % Noise variance on distances (under the null)
+        wNoiseDist = [];      % Noise structure assumed for whitening
         numPart=5;      % Number of partitions
-        P = 20;         % Number of voxels 
-        vararginoptions(varargin(2:end),{'noise','numPart','N','P'}); 
-        K = size(squareform(M{1}.RDM)); 
-        C=pcm_indicatorMatrix('allpairs',[1:K]); 
+        P = 20;         % Number of voxels
+        vararginoptions(varargin(2:end),{'noise','numPart','N','P','wNoiseDist'});
+        K = size(squareform(M{1}.RDM));
+        C=pcm_indicatorMatrix('allpairs',[1:K]);
         
         if (isscalar(noise))
-            noise = noise * eye(K); 
-        end; 
-
+            noise = noise * eye(K);
+        end;
+        
+        % This is the covariance that is used to induce noise into the
+        % distances
         XiM = C*noise*C';
-        Var= 2/P * XiM.*XiM; 
-        A = cholcov(Var); 
-        [V,L]=eig(Var); 
-                
+        Var= 2/P * XiM.*XiM;
+        A = cholcov(Var);
+        
+        % This is the covariance that is used to prewhiten the data
+        if (isempty(wNoiseDist))
+            wNoiseDist = (C*C').^2; % Use i.i.d assumption for whitening
+        end
+        [V,L]=eig(wNoiseDist);
         l=real(diag(L));
         sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
-            
-        % Check the projection of the models 1 
-        model = [M{1}.RDM-mean(M{1}.RDM);M{2}.RDM-mean(M{2}.RDM)]; 
-        p=model*V;
-        % [l';p]
-
-        % Check the projection of the models 1 
-        model = [M{1}.RDM/sqrt(sum(M{1}.RDM.^2));M{2}.RDM/sqrt(sum(M{2}.RDM.^2))]; 
-        p=model*V;
-        % [l';p]
-
-        for i=1:2
+        
+        for i=1:3
             raw   = normrnd(0,1,N,size(M{1}.RDM,2));
-
-            % Non-Crossvalidated 
+            
+            % Non-Crossvalidated
             epsilon = raw * A ;
-            data = bsxfun(@plus,epsilon,M{i}.RDM); 
-            data = bsxfun(@plus,data,diag(XiM)'); % Add the bias  
-            r{1}=corr((data)',model'); 
-            r{2}=corr((data*sq)',(model*sq)'); 
-
+            if (i<3)    % If simulation 1 or 2 - add true signal
+                data = bsxfun(@plus,epsilon,M{i}.RDM); % Add the true signal 
+            else 
+                data = epsilon; 
+            end;
+            data = bsxfun(@plus,data,diag(XiM)'); % Add the bias
+            model = [M{1}.RDM;M{2}.RDM];
+            data0 = bsxfun(@minus,data,mean(data,2));
+            model0 = bsxfun(@minus,model,mean(model,2));
+            
+            r{1}=corrN((data0)',model0');
+            r{2}=corrN((data0*sq)',(model0*sq)');
+            
             % Crossvalidated
-            epsilon = raw * A * sqrt(numPart/(numPart-1)); % Inflation of noise 
-            data = bsxfun(@plus,epsilon,M{i}.RDM); 
-            r{3}=corrN((data)',model'); 
-            r{4}=corrN((data*sq)',(model*sq)'); 
-            
-            tM = i; 
-            fM = 3-i; 
-            
-            for j=1:4 
-                r{j}=round(r{j},5); 
-                correct(j,i)=sum(r{j}(:,tM)>r{j}(:,fM))+0.5*sum(r{j}(:,tM)==r{j}(:,fM)); 
-                model2(j,i)=sum(r{j}(:,2)>r{j}(:,1))+0.5*sum(r{j}(:,1)==r{j}(:,2)); 
+            data = epsilon * sqrt(numPart/(numPart-1)); % Inflation of noise
+            if (i<3)    % If simulation 1 or 2 - add true signal
+                data = bsxfun(@plus,data,M{i}.RDM); % Add the true signal 
             end; 
-        end; 
-        correct = mean(correct/N,2); 
-        model2 = mean(model2/N,2); 
-        varargout={correct,model2}; 
-    case 'Figure_crossval_noncrossval' % Figure 4 
+            
+            r{3}=corrN((data)',model');
+            r{4}=corrN((data*sq)',(model*sq)');
+            
+            if (i<3) 
+                tM = i;
+                fM = 3-i;
+            
+                for j=1:4
+                    r{j}=round(r{j},5);
+                    correct(j,i)=sum(r{j}(:,tM)>r{j}(:,fM))+0.5*sum(r{j}(:,tM)==r{j}(:,fM));
+                    model2(j,i)=sum(r{j}(:,2)>r{j}(:,1))+0.5*sum(r{j}(:,1)==r{j}(:,2));
+                end;
+            else % Null model 
+                for j=1:4
+                    bias(j) = sum(r{j}(:,2)>r{j}(:,1))+0.5*sum(r{j}(:,1)==r{j}(:,2)); 
+                end; 
+            end; 
+        end;
+        bias = bias/N; 
+        correct  = correct/N;
+        correctM = mean(correct,2);
+        model2 = mean(model2/N,2);
+        varargout={correctM,bias,model2,correct(:,1),correct(:,2)};
+    case 'Figure_crossval_noncrossval' % Figure 4
         CAT.linecolor={'b','r','b','r'};
         CAT.markercolor={'b','r','b','r'};
         CAT.linewidth={2,2,2,2};
         CAT.linestyle={'-','-','--','--'};
-        K=4; 
-        numPart=[2 3 4 5 6 8 10 12]; 
-        c = 0.15; 
-        noise1 = [1 c 0 0;c 1 c 0;0 c 1 c;0 0 c 1]*1.3; 
-        noise = {noise1,0.5,1,1.2}; 
-        ymin = [0.5 0.4 0.5 0.5];         
-        ymax = [0.8 0.7 0.8 0.8]; 
-        H=eye(K)-ones(K)/K; 
-        C=indicatorMatrix('allpairs',[1:K]); 
-        V=((C*C').^2)/2; 
-        [E,l]=eig(V);  % E are the eigenvalues of the variance-covariance matrix 
-        for i=1:4 
+        K=4;
+        numPart=[2 3 4 5 6 8 10 12];
+        c = 0.15;
+        noise1 = [1 c 0 0;c 1 c 0;0 c 1 c;0 0 c 1]*2;
+        noise = {noise1,0.8,1.5,2};
+        ymin = [0.55 0.45 0.55 0.55];
+        ymax = [0.75 0.65 0.75 0.75];
+        H=eye(K)-ones(K)/K;
+        
+        % Make the wNoiseDist matrix used for whitening
+        C=indicatorMatrix('allpairs',[1:K]);
+        wNoiseDist=((C*C').^2)/2;
+        [V,l]=eig(wNoiseDist);  % E are the eigenvalues of the variance-covariance matrix
+        l = real(diag(l));
+        
+        for i=1:4
             switch(i)
-                case 1
-                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';
-                    a = M{1}.RDM(1); 
-                    b = M{1}.RDM(2); 
+                case {1,4}
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*V';
+                    a = M{1}.RDM(1);
+                    b = M{1}.RDM(2);
                     M{2}.RDM=[b a b b a b];
                 case 2
-                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';  % Differs in the size of one component
-                    M{2}.RDM=[0 -0.2 0 0 0 1]*E';
-                case 3 
-                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';  
-                    M{2}.RDM=[0.1 0 0 0 0 1]*E';
-                case 4 
-                    M{1}.RDM=[0 -0.5 0 0 0 1]*E';  % Differs in sign on independent components 
-                    M{2}.RDM=[0  0  0.5 0 0 1]*E';
-            end; 
-            for j=1:2 
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*V';  % Differs in the size of one component
+                    M{2}.RDM=[0 -0.2 0 0 0 1]*V';
+                case 3
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*V';
+                    M{2}.RDM=[0.1 0 0 0 0 1]*V';
+                case 5
+                    M{1}.RDM=[0 -0.5 0 0 0 1]*V';  % Differs in sign on independent components
+                    M{2}.RDM=[0  0  0.5 0 0 1]*V';
+            end;
+            for j=1:2
                 M{j}.Gc = -0.5*H*squareform(M{j}.RDM)*H;
             end
             
-            for j=1:length(numPart) 
-                [Correct(j,:),Model2(j,:)]=rsa_covarianceDistPaper('predict_bestMethods',M,...
-                    'numPart',numPart(j),'noise',noise{i},'N',1000); 
-            end; 
-            figure(1); 
-            subplot(2,4,i); 
+            % Check the projection of the models 1
+            % Note that when the projection of the model difference lands
+            % on Eigenvectors with different values, prewhitening will make
+            % a difference to the model decision.
+            model0 = [M{1}.RDM-mean(M{1}.RDM);M{2}.RDM-mean(M{2}.RDM)];
+            % model0 = bsxfun(@rdivide,model0,sqrt(sum(model0.^2,2)));
+            p=model0*V;
+            fprintf('\nSimulation %d\n',i);
+            fprintf('Eigenvalues:% .2f  % .2f  % .2f  % .2f  % .2f  % .2f\n',l');
+            fprintf('M1 biased:  % .2f  % .2f  % .2f  % .2f  % .2f  % .2f -> % .2f\n',p(1,:),model0(1,:)*model0(1,:)');
+            fprintf('M2 biased:  % .2f  % .2f  % .2f  % .2f  % .2f  % .2f -> % .2f\n',p(2,:),model0(2,:)*model0(2,:)');
+            
+            % Check the projection of the models 1
+            model = [M{1}.RDM;M{2}.RDM];
+            % model = bsxfun(@rdivide,model,sqrt(sum(model.^2,2)));
+            p=model*V;
+            fprintf('----------------------------------------------------\n',p(1,:));
+            fprintf('M1 unbiased:% .2f  % .2f  % .2f  % .2f  % .2f  % .2f -> % .2f\n',p(1,:),model(1,:)*model(1,:)');
+            fprintf('M2 unbiased:% .2f  % .2f  % .2f  % .2f  % .2f  % .2f -> % .2f\n',p(2,:),model(2,:)*model(2,:)');
+            
+            
+            for j=1:length(numPart)
+                [Correct(j,:),Bias(j,:),Model2(j,:),C1(j,:),C2(j,:)]=rsa_covarianceDistPaper('predict_bestMethods',M,...
+                    'numPart',numPart(j),'noise',noise{i},'N',500000,'wNoiseDist',wNoiseDist);
+            end;
+            figure(1);
+            subplot(2,4,i);
             lineplot(numPart',Correct(:,[1 3]),'CAT',CAT,'errorfcn',[]);
-            set(gca,'YLim',[ymin(i) ymax(i)]); 
-            drawline(0.5,'dir','horz'); 
-            subplot(2,4,i+4); 
+            set(gca,'YLim',[ymin(i) ymax(i)]);
+            drawline(0.5,'dir','horz');
+            subplot(2,4,i+4);
             lineplot(numPart',Model2(:,[1 3]),'CAT',CAT,'errorfcn',[]);
             set(gca,'YLim',[0.2 0.7]);
-            drawline(0.5,'dir','horz'); 
+            drawline(0.5,'dir','horz');
             
-            figure(2); 
-            for m=1:2 
-                subplot(2,4,(m-1)*4+i); 
-                D=squareform(M{m}.RDM); 
-                mD = max(D(:))*1.4; 
-                imagesc_rectangle(D,'YDir','reverse','MAP',cmapRDM,'scale',[0 mD]); 
-                set(gca,'YTick',[],'XTick',[]); 
-                axis equal; 
-            end; 
-        end; 
-        figure(1); 
-        set(gcf,'PaperPosition',[2 2 10 3]); 
-        wysiwyg; 
-        figure(2); 
-        set(gcf,'PaperPosition',[2 2 8 5]); 
-        wysiwyg; 
+            fprintf('Biased p(M2): %2.3f  Unbiased p(M2): %2.3f\n',mean(Bias(:,1)), mean(Bias(:,3)));
+            
+            figure(2);
+            for m=1:2
+                subplot(2,4,(m-1)*4+i);
+                D=squareform(M{m}.RDM);
+                mD = max(D(:))*1.4;
+                imagesc_rectangle(D,'YDir','reverse','MAP',cmapRDM,'scale',[0 mD]);
+                set(gca,'YTick',[],'XTick',[]);
+                axis equal;
+            end;
+        end;
+        figure(1);
+        set(gcf,'PaperPosition',[2 2 10 5]);
+        wysiwyg;
+        figure(2);
+        set(gcf,'PaperPosition',[2 2 10 5]);
+        wysiwyg;
+    case 'Bias_Scenario3' % Why does a bias arise in Scenario 3 - despite the fact that noise is iid?
+        K=4; 
+        P=10; 
+        N = 100000; 
+        H=eye(K)-ones(K)/K;
+        C=indicatorMatrix('allpairs',[1:K]);
+        wNoiseDist=((C*C').^2)/2;
+        [V,l]=eig(wNoiseDist);  % E are the eigenvalues of the variance-covariance matrix
+        l = real(diag(l));
+        A = cholcov(wNoiseDist);            % This matrix induces the covariance structure 
+        sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
         
+        M{1}.RDM=[0 -0.5 0 0 0 1]*V';
+        M{2}.RDM=[0.1 0 0 0 0 1]*V';
+        for j=1:2
+            M{j}.Gc = -0.5*H*squareform(M{j}.RDM)*H;
+        end
+        
+        % Check the projection of the models 1
+        % Note that when the projection of the model difference lands
+        % on Eigenvectors with different values, prewhitening will make
+        % a difference to the model decision.
+        model0 = [M{1}.RDM-mean(M{1}.RDM);M{2}.RDM-mean(M{2}.RDM)];
+        % model0 = bsxfun(@rdivide,model0,sqrt(sum(model0.^2,2)));
+        p=model0*V;
+        fprintf('Eigenvalues:% .2f  % .2f  % .2f  % .2f  % .2f  % .2f\n',l');
+        fprintf('M1 biased:  % .2f  % .2f  % .2f  % .2f  % .2f  % .2f\n',p(1,:));
+        fprintf('M2 biased:  % .2f  % .2f  % .2f  % .2f  % .2f  % .2f\n',p(2,:));
+                
+       % Non-Crossvalidated
+       for i=1:2 
+           data = normrnd(0,1,N,size(model0,2)) * A;
+           data = bsxfun(@plus,data,mean(model0,1));
+           % data = bsxfun(@plus,data,diag(XiM)'); % Add the bias
+           data0 = bsxfun(@minus,data,mean(data,2)); % Subtract mean 
+
+           r{1}=corrN((data0)',model0');
+           r{2}=corrN((data0*sq)',(model0*sq)');
+           m1n(i) = mean(r{1}(:,1)>r{1}(:,2)); 
+           m1w(i) = mean(r{2}(:,1)>r{2}(:,2));            
+       end; 
+       fprintf('For Model 1 (N): %2.3f  %2.3f   %2.3f \n',m1n(1),m1n(2),mean(m1n)); 
+       fprintf('For Model 1 (W): %2.3f  %2.3f   %2.3f \n',m1w(1),m1w(2),mean(m1w)); 
 end;
 
 function r=cosineW(A,B,Sig); % Weighted cosine similarity measure
