@@ -433,7 +433,7 @@ switch (what)
             end;
         end;
         figure(1);
-        set(gcf,'PaperPosition',[2 2 10 5]);
+        set(gcf,'PaperPosition',[2 2 10 4]);
         wysiwyg;
         figure(2);
         set(gcf,'PaperPosition',[2 2 10 5]);
