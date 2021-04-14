@@ -78,11 +78,23 @@ switch(what)
         
         y=Z*trueU+err;
         varargout={y,trueU};
-    case 'scalar_test'          % Test for the formula for the cov(xy,uv) 
+    case 'scalar_test'          % Test for the formula for the E(xy) and cov(xy,uv) 
+        noisedist = []; 
+        N = 10000000; 
         M = [1 2 1.1 0.3]; 
         Sig  = [1 0.5 0.3 0.1;0.5 1.2 0.2 0.05;0.3 0.2 1.3 0.7;0.1 0.05 0.7 1.5]; 
+        vararginoptions(varargin,{'noisedist','M','Sig'})
         A    = cholcov(Sig);
-        Y = bsxfun(@plus,normrnd(0,1,10000000,4)*A,M);
+        if (isempty(noisedist)) % Use normal by default
+            Y = bsxfun(@plus,normrnd(0,1,N,4)*A,M);
+        else 
+            Y = unifrnd(0,1,N,4); 
+            Y = noisedist(Y); % Specify distribution by inverse cdf 
+            Y = bsxfun(@minus,Y,sum(Y)/N); 
+            Y = bsxfun(@rdivide,Y,sqrt(sum(Y.^2)/N)); % Make z-standard
+            Y = Y*A; % Give the desired covariance matrix
+            Y = bsxfun(@plus,Y,M); 
+        end
         X = [Y(:,1).*Y(:,2) Y(:,3).*Y(:,4)]; 
         
         mean_hat = [M(1)*M(2)+Sig(1,2) M(3)*M(4)+Sig(3,4)]; 
@@ -92,15 +104,15 @@ switch(what)
                   M(2)*M(3)*Sig(1,4) + M(2)*M(4)*Sig(1,3) + ...
                   Sig(1,3)*Sig(2,4) + Sig(1,4)*Sig(2,3);         
         fprintf('mean:\n'); 
-        fprintf('predicted %2.2f %2.2f\n',mean_hat(1),mean_hat(2));
-        fprintf('measured  %2.2f %2.2f\n',mean(X(:,1)),mean(X(:,2)));
+        fprintf('predicted %2.3f %2.3f\n',mean_hat(1),mean_hat(2));
+        fprintf('measured  %2.3f %2.3f\n',mean(X(:,1)),mean(X(:,2)));
         fprintf('variance:\n'); 
-        fprintf('predicted %2.2f %2.2f\n',var_hat(1),var_hat(2));
-        fprintf('measured  %2.2f %2.2f\n',var(X(:,1)),var(X(:,2)));
+        fprintf('predicted %2.3f %2.3f\n',var_hat(1),var_hat(2));
+        fprintf('measured  %2.3f %2.3f\n',var(X(:,1)),var(X(:,2)));
         fprintf('covariance:\n'); 
-        fprintf('predicted %2.4f \n',cov_hat);
+        fprintf('predicted %2.3f \n',cov_hat);
         C=cov(X);
-        fprintf('measured  %2.4f \n',C(1,2));
+        fprintf('measured  %2.3f \n',C(1,2));
         
         
     case 'vector_test'          % Test for the properties of the inner product between two vectors <x,y>
