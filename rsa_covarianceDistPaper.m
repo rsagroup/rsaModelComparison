@@ -124,6 +124,55 @@ switch (what)
         axis equal;
         set(gca,'YTick',[],'XTick',[]);
     case 'Figure_variancebias'         % Figure 3: Variance-bias plots
+        % Get the simlation across different distance levels 
+        % D=rsa_testVarianceBasic('dist_covariance_sim');
+        D=varargin{1};  
+        rsa_testVarianceBasic('Fig_variance',D)
+        dist  = [1 2 5]; % Distances to consider 
+        distV = [1 12 45];  % relevant entrees in the distance matrix 
+        
+        % Extract the dat a for the cross-validated distance
+        x=D.pEc(:,dist);
+        T.trueD = x(:); 
+        T.pE=x(:); 
+        x=D.Ec(:,dist);
+        T.E=x(:); 
+        x=D.pVc(:,distV);
+        T.pV=x(:); 
+        x=D.Vc(:,distV); 
+        T.V=x(:); 
+        T.crossval = ones(length(T.trueD),1); 
+        % Now repeat this for non-cross validated distance 
+        S=T; 
+        x=D.pE(:,dist);
+        S.pE=x(:); 
+        x=D.E(:,dist);
+        S.E=x(:); 
+        x=D.pV(:,distV);
+        S.pV=x(:); 
+        x=D.V(:,distV); 
+        S.V=x(:); 
+        S.crossval = ones(length(T.trueD),1)*2; 
+        T=addstruct(T,S); 
+        
+        % Do the two separate subplot 
+        subplot(1,2,1); 
+        lineplot(T.trueD,T.E,'split',T.crossval,'style_thickline','leg',{'unbiased','biased'});
+        line([0;1.2],[0;1.2],'color','k'); 
+        xlabel('True distance');
+        ylabel('Expected value');       
+        set(gca,'YLim',[0 max(T.pE)+0.05],'XLim',[0 1.3]);        
+
+        subplot(1,2,2); 
+        lineplot(T.trueD,T.V,'split',T.crossval,'style_thickline','leg',{'unbiased','biased'});
+        xlabel('True distance');
+        ylabel('Variance');       
+        
+        set(gca,'YLim',[0 max(T.pV)+0.04],'XLim',[0 1.3]);        
+        set(gcf,'PaperPosition',[2 2 6.8 3]);
+        wysiwyg;
+        
+        
     case 'Figure_covariances'          % Figure 5: Covariance matrices
         figure;
         sc = [0 0.14];
