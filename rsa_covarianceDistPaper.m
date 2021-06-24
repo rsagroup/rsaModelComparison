@@ -171,8 +171,6 @@ switch (what)
         set(gca,'YLim',[0 max(T.pV)+0.04],'XLim',[0 1.3]);        
         set(gcf,'PaperPosition',[2 2 6.8 3]);
         wysiwyg;
-        
-        
     case 'Figure_covariances'          % Figure 5: Covariance matrices
         figure;
         sc = [0 0.14];

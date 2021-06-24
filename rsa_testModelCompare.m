@@ -8,7 +8,7 @@ function varargout=rsa_testModelCompare(what,varargin)
 % chordDir='/Users/joern/Projects/ChordPatternDist/analysis';
 baseDir = '/Users/jdiedrichsen/Dropbox (Diedrichsenlab)/Projects/modelCompare';
 
-% Use develop branch of the RSA toolbox
+% Use develop branch of the RSA matlab toolbox at https://github.com/rsagroup/rsatoolbox_matlab
 import rsa.*;
 import rsa.util.*;
 import rsa.stat.*;
@@ -17,15 +17,15 @@ import rsa.rdm.*;
 %  Make the representational model matrices from features
 switch (what)
     % Prepare 3 different models and bring them into the correct format
-    case 'prep5FingerModel'
+    case 'prep5FingerModel'     % Prepare models for Experiment 1 
         M(1)=load(fullfile(baseDir,'Muscle_model.mat'));
         M(2)=load(fullfile(baseDir,'Naturalstats_model.mat'));
-        save(fullfile(baseDir,'Model_fiveFinger.mat'),'M');
         for i=1:length(M)
             M(i).RDM=M(i).RDM./sqrt(sum(M(i).RDM.^2));
         end;
+        save(fullfile(baseDir,'Model_fiveFinger.mat'),'M');
         varargout={M};
-    case 'prepChord'
+    case 'prepChord'            % Prepare models for Experiment 2 
         % Standardisation, but no absolute value
         D=load(fullfile(chordDir,'distance_emg.mat'));
         M(1).RDM=mean(D.dist(D.method==6,:));
@@ -40,7 +40,7 @@ switch (what)
         end;
         save(fullfile(baseDir,'Model_chords.mat'),'M');
         varargout={M};
-    case 'prepStartA'
+    case 'prepStartA'           % Prepare models for Experiment 3 
         load(fullfile(baseDir,'START_B_visualiseRDMs','modelRDMs_A2.mat'));
         M=modelRDMs_struct;
         indx=[];
@@ -54,7 +54,7 @@ switch (what)
             M(i).RDM=M(i).RDM./sqrt(sum(M(i).RDM.^2));
         end;
         save(fullfile(baseDir,'START_compl.mat'),'M');
-    case 'evaluateSubspace' % Looks at the subspace overlap of models in terms of their principal components
+    case 'evaluateSubspace'     % Looks at the subspace overlap of models in terms of their principal components
         M=varargin{1};
         
         for m=1:2
@@ -77,7 +77,7 @@ switch (what)
         plot([1:numCat]',cs1,'b',[1:numCat]',cs2,'r');
         subplot(2,1,2);
         plot([1:k],R2);
-    case 'simulate_data'                % Generate data from model structure: Generate activities and then distances
+    case 'simulate_data'        % Generate data from model structure: Generate activities and then distances
         % 1. model distance by d = X*omega
         % 2. get G from d by G = (H(-0.5*d)H'), H: centering matrix (I-1/N)
         % 3. get trueU (u=cholcov(G)*normrand(0,1))
@@ -100,14 +100,16 @@ switch (what)
         D.numCond    = size(squareform(Model.RDM(1,:)),1);      % Number of conditions
         
         % (Simulated) Experimental parameters: default
-        D.numPart       = 9;                % Number of runs
-        D.numVox        = 160;              % Number of voxels
-        D.omega         = zeros(1,D.numComp);   % hyperparamter on distance model
-        D.var_e         = 1;                % Noise variance: Like omega, this is cumulative over voxels
-        D.numSim        = 1000;             % Number of simulation
+        D.numPart       = 9;                        % Number of runs
+        D.numVox        = 160;                      % Number of voxels
+        D.omega         = zeros(1,D.numComp);       % hyperparamter on distance model
+        D.var_e         = 1;                        % Noise variance: Like omega, this is cumulative over voxels
+        D.Sigma_P       = [];                       % Noise-covariance matrix across voxels - if empty assumes identity
+        D.Sigma_K       = [];                       % Noise-covariance matrix axross conditions- if empty assumes identity
+        D.numSim        = 1000;                     % Number of simulation
         
         %- allow to get user options
-        D               = getUserOptions({varargin{2:end}},D);
+        D               = rsa_getUserOptions({varargin{2:end}},D);
         
         D.N             = D.numPart*D.numCond;          % Number of trials
         part            = kron([1:D.numPart]',ones(D.numCond,1));            % Partitions
@@ -133,18 +135,30 @@ switch (what)
         
         S = [];
         
+        % Get cholesky decomposition of the covariances -
+        % mean(trace(sigma)) is assumed to be 1 
+        if(~isempty(D.Sigma_P))
+            cholcov_P = cholcov(D.Sigma_P);
+        else 
+            cholcov_P = eye(D.numVox);
+        end 
+          
+        if(~isempty(D.Sigma_K))
+            cholcov_K = cholcov(D.Sigma_K);
+        else 
+            cholcov_K = eye(D.numCond);
+        end
+        
+        % Now run the simulations
         for n = 1:D.numSim
-            
-            
-            % Scale if necessary
-            if (isfield(D,'phi'))
-                G=G.*D.phi(n);
-            end;
             
             % Generate true pattern from predicted distances
             trueU = mvnrnd_exact(G,D.numVox);
             % Generate artificial data
-            Noise     = sqrt(D.var_e) * randn(D.N,D.numVox);  % Strech the variance of the noise over voxels, just as omega
+            Noise = [];
+            for p = [1:D.numPart] 
+                Noise     = [Noise;sqrt(D.var_e) * cholcov_K'*randn(D.numCond,D.numVox)*cholcov_P];  % Strech the variance of the noise over voxels, just as omega
+            end
             Y(:,:,n)  = Za*trueU + Noise;
             
             % Calc cross-validated distance and noise estimate
@@ -172,7 +186,7 @@ switch (what)
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',100,'outfile','sim_rsa_Exp2.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
         % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',1,'outfile','sim_rsa_Exp3.mat','methods',RSA_methods,'Omega',[0:0.1:0.6]);
         %
-        % NEW RSA simulation
+        % NEW RSA simulation (for Diedrichsen et al. 2020)
         % RSA_methods={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq','pearsonWNc','cosine','cosineWNull'};
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_rsan_Exp1a.mat','methods',RSA_methods,'Omega',[0:0.1:0.8]);
         % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile','sim_rsan_Exp2a.mat','methods',RSA_methods,'Omega',[0:0.05:0.3]);
@@ -187,9 +201,9 @@ switch (what)
         %
         %
         % PCM simulations
-        %         rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',500,'outfile','sim_pcm_Exp1.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.8]);
-        %         rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',100,'outfile','sim_pcm_Exp2.mat','methods',{'loglikPCM'},'Omega',[0:0.05:0.3]);
-        %         rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',100,'outfile','sim_pcm_Exp3.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.6]);
+        % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',500,'outfile','sim_pcm_Exp1.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.8]);
+        % rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',100,'outfile','sim_pcm_Exp2.mat','methods',{'loglikPCM'},'Omega',[0:0.05:0.3]);
+        % rsa_testModelCompare('modelCompare','model','Model_START.mat','numSim',100,'outfile','sim_pcm_Exp3.mat','methods',{'loglikPCM'},'Omega',[0:0.1:0.6]);
         %
         % OPT_methods={'encodePCM','loglikIRLS','loglikPCM'};
         % rsa_testModelCompare('modelCompare','model','Model_fiveFinger.mat','numSim',1000,'outfile','sim_opt_Exp1a.mat','methods',OPT_methods,'Omega',0.3);
@@ -208,6 +222,8 @@ switch (what)
         Opt.numPart = 8;
         Opt.numVox  = 160;
         Opt.outfile = [];
+        Opt.Sigma_K = [];  % Condiiton covariance of noise 
+        Opt.Sigma_P = [];  % Voxel covariance in noise 
         Opt.Omega   = [0 0.3 0.6 0.9];
         
         Opt=rsa.getUserOptions(varargin,Opt);
@@ -231,7 +247,9 @@ switch (what)
         D.numPart = Opt.numPart;
         D.numVox  = Opt.numVox;
         D.numSim  = Opt.numSim;
-        
+        D.Sigma_P = Opt.Sigma_P;
+        D.Sigma_K = Opt.Sigma_K;
+
         % Prep some convenience matrices
         H = eye(D.numCat)-ones(D.numCat)/D.numCat;  % Centering matrix
         part  = kron([1:D.numPart]',ones(D.numCat,1));
@@ -386,6 +404,18 @@ switch (what)
             save(fullfile(baseDir,Opt.outfile),'T','U');
         end;
         varargout={U,T};
+    case 'modelCompare_Sigma_P' 
+        % Simulation with spatially correlated noise
+        methods={'loglikPCM','pearsonNc','pearsonWNc','cosine','cosineWNull'};
+        [X,Y,Z]=meshgrid([1:6],[1:6],[1:6]);  % Make a cube of voxels 
+        C = [X(:) Y(:) Z(:)]; % Get coordinates 
+        D = (C(:,1)-C(:,1)').^2 + (C(:,2)-C(:,2)').^2 + (C(:,3)-C(:,3)').^2;
+        for s = [0:5]
+            Sigma_P = exp(-D/s);
+            Sigma_P(isnan(Sigma_P))=1; % Make sure s=0 leads to indentity matrix 
+            out = sprintf('%s/sim_sigP_%d_Exp2a.mat',baseDir,s); 
+            rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile',out,'methods',methods,'Omega',0.5,'Sigma_P',Sigma_P,'numVox',216);
+        end         
     case 'calc_mean_correct'
         criterion = varargin{1};
         truemodel = varargin{2};
@@ -1044,7 +1074,7 @@ switch (what)
         rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1);
         subplot(2,3,6);
         rsa.fig.imageRDMs(M{7},'transformfcn','ssqrt','singleRDM',1);
-    case 'Figure_regularisation'  % Figure 6 in paper
+    case 'Figure_regularisation'  % Figure 6 in Diedrichsen & Kriegeskorte, 2017
         T=[];
         files=dir('sim_encodeRegularise_Exp2*');
         for i=1:length(files)
@@ -1066,7 +1096,7 @@ switch (what)
         drawline(0.5,'dir','horz');
         set(gcf,'PaperPosition',[0 0 3 7])
         wysiwyg
-    case 'Figure_pcm_rsa_encode'  % Figure 7 in paper
+    case 'Figure_pcm_rsa_encode'  % Figure 7 in Diedrichsen & Kriegeskorte, 2017
         filesNames={'encRidgeCorr','rsa','pcm'};
         cd(baseDir);
         for ex=1:3
@@ -1111,7 +1141,7 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
-    case 'Figure_bestMethods'     % Figure 8 in paper
+    case 'Figure_bestMethods'     % Figure 8 in in Diedrichsen & Kriegeskorte, 2017
         methods={'loglikIRLS','loglikPCM','encodePCM','encodePCMcorr'};
         methType = [1 2 3 3 4 4]';
         evalType = [1 1 1 2 1 2]';
