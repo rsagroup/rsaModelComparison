@@ -406,16 +406,17 @@ switch (what)
         varargout={U,T};
     case 'modelCompare_Sigma_P' 
         % Simulation with spatially correlated noise
-        methods={'loglikPCM','pearsonNc','pearsonWNc','cosine','cosineWNull'};
+        methods={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
         [X,Y,Z]=meshgrid([1:6],[1:6],[1:6]);  % Make a cube of voxels 
         C = [X(:) Y(:) Z(:)]; % Get coordinates 
         D = (C(:,1)-C(:,1)').^2 + (C(:,2)-C(:,2)').^2 + (C(:,3)-C(:,3)').^2;
         for s = [0:5]
             Sigma_P = exp(-D/s);
             Sigma_P(isnan(Sigma_P))=1; % Make sure s=0 leads to indentity matrix 
-            out = sprintf('%s/sim_sigP_%d_Exp2a.mat',baseDir,s); 
-            rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',1000,'outfile',out,'methods',methods,'Omega',0.5,'Sigma_P',Sigma_P,'numVox',216);
-        end         
+            %out = sprintf('%s/sim_sigP_%d_Exp2a.mat',baseDir,s);
+            out = sprintf('sim_sigP_%d_Exp2a.mat',s);
+            rsa_testModelCompare('modelCompare','model','Model_chords.mat','numSim',10000,'outfile',out,'methods',methods,'Omega',0.15,'Sigma_P',Sigma_P,'numVox',216);
+        end     
     case 'calc_mean_correct'
         criterion = varargin{1};
         truemodel = varargin{2};
