@@ -920,6 +920,69 @@ switch (what)
             D.method(a)=i;
         end;
         varargout={D};
+    case 'confInterval_Spatialcorr'
+        s=4;
+        
+        methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
+        load(fullfile(baseDir,sprintf('sim_sigP_%d_Exp2a.mat',s)))
+        N = size(U.truemodel,1);
+        alpha = 0.05;
+        ts = tinv([alpha/2  1-alpha/2],N-1);      % T-Score
+        numModels = length(unique(U.truemodel));
+        for m=1:length(methodStr)
+            meancorrect = nan(N,1);
+            for n=1:N
+                val = U.(methodStr{m})(n,:);
+                trueval = val(U.truemodel(n));
+                val(U.truemodel(n))=[];
+                meancorrect(n,:) = (sum(trueval>val) + ...
+                    sum(trueval==val)*0.5)./(numModels-1);
+            end;
+            K.propCorr(m,1)  = mean(meancorrect);
+            K.standardError(m,1)  = std(meancorrect)/N;
+            K.CI(m,:) = K.propCorr(m,1)+ts*K.standardError(m,1);
+            K.method(m,1)    = m;
+            K.methodStr{m,1} = methodStr{m};
+        end;
+    case 'Figure_R6_Spatialcorr'
+        
+        %methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
+        methodStr={'PCM','pearson','whitened pearson','cosine','whitened cosine'};
+        legend_order = [5 1 3 2 4];
+%         CAT.linecolor={'b','r','b','r','k'};
+%         CAT.markercolor={'b','r','b','r','k'};
+%         CAT.linewidth={2,2,2,2,1};
+%         CAT.linestyle={'-','-','--','--',':'};
+        
+        CAT.linecolor={'k','b','b','r','r'};
+        CAT.markercolor={'k','b','b','r','r'};
+        CAT.linewidth={1,2,2,2,2};
+        CAT.linestyle={':','-','--','-','--'};
+        
+        D=[];
+        for s = [0:5]
+            load(fullfile(baseDir,sprintf('sim_sigP_%d_Exp2a.mat',s)))
+            T.s = s*ones(size(T.method));
+            T.propCorr=T.propCorr(legend_order);
+            T.methodStr=T.methodStr(legend_order);
+            D=addstruct(D,T);
+        end
+        %Fig = figure;
+        hold all
+        set(gca,'YLim',[0.4 1]);
+        set(gca,'XLim',[0 5]);
+        set(gca,'fontname','arial')
+        drawline(0.5,'dir','horz','linestyle',':');
+        lineplot(D.s,D.propCorr,'split',D.method,'style_thickline',...
+                        'leg',methodStr,'leglocation','southwest','CAT',CAT,'errorfcn',[],'subset',D.method>0);
+        set(gca,'YLim',[0.4 1]);
+        ylabel('Model selection accuracy');
+        xlabel('Kernel width');
+        set(gcf,'PaperPosition',[0 0 4 3],'PaperSize',[4 3]);
+        wysiwyg;
+        
+        print -dpdf Figure_R6.pdf -r1000
+        %print(Fig,fullfile('Figure_R6'),'-dpdf','-r1000','-bestfit') %dpdf
     case 'Figure_numReg' % This is the encoding model figure for different numbers of regressors
         cd(baseDir);
         methods={'encodeReg','encodePCM'};   %,'encodeRidge'
