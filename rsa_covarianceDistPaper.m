@@ -100,7 +100,7 @@ switch (what)
             M{i}.numGparams = 0;
             M{i}.Gc = -0.5*H*squareform(M{i}.RDM)*H;
         end;
-    case 'Figure1'                     % Figure 1: RDMs
+    case 'Figure1'                     % Figure 1: RDMs for Figure 1
         G=diag([2 1 0 0 0]);
         nC =5;
         numVox = 20;
@@ -171,227 +171,7 @@ switch (what)
         set(gca,'YLim',[0 max(T.pV)+0.04],'XLim',[0 1.3]);        
         set(gcf,'PaperPosition',[2 2 6.8 3]);
         wysiwyg;
-    case 'Figure_covariances'          % Figure 5: Covariance matrices
-        figure;
-        sc = [0 0.14];
-        subplot(2,3,1);
-        G=diag([0 0 0 0 0]);
-        nC =5;
-        H=eye(nC)-ones(nC)/nC;
-        C=indicatorMatrix('allpairs',[1:nC]);
-        d = (diag(C*G*C'));
-        D = squareform(d);
-        covD = rsa_varianceLDC(d,C,1,8,10);
-        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc);
-        axis equal;
-        set(gca,'YTick',[],'XTick',[]);
-        
-        subplot(2,3,4);
-        G=diag([1 0.5 0 0 0])/20;
-        d = (diag(C*G*C'));
-        D = squareform(d);
-        covD = rsa_varianceLDC(d,C,1,8,10);
-        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc);
-        axis equal;
-        set(gca,'YTick',[],'XTick',[]);
-        
-        subplot(2,3,[2 3 5 6]); % 20 distance Figure
-        nC =20;
-        colormap(cmapCov);
-        C=indicatorMatrix('allpairs',[1:nC]);
-        covD = rsa_varianceLDC(zeros(size(C,1),1),C,1,8,10);
-        imagesc(sqrt(covD),sc);
-        axis equal;
-        set(gca,'YTick',[],'XTick',[]);
-    case 'Figure_rsa_pcm'
-        filesNames={'rsa','pcm'};
-        cd(baseDir);
-        for ex=1:3
-            
-            T=[];
-            S=[];
-            
-            % Load RSA files
-            for f=1:2
-                files=dir(sprintf('sim_%s_Exp%d*',filesNames{f},ex));
-                for i=1:length(files)
-                    R=load(files(i).name);
-                    [Num,om]=pivottable(R.U.omega,[],R.U.sig_hat,'length');
-                    for o=1:length(om)
-                        R.T.numSim(R.T.omega==om(o),1)=Num(o);
-                    end;
-                    T=addstruct(T,R.T);
-                end;
-                T.omega = round(T.omega,3);
-                D=tapply(T,{'method','methodStr','omega'},{T.propCorr.*T.numSim,'sum','name','numCorr'},{T.numSim,'sum','name','numSim'});
-                D.propCorr = D.numCorr ./ D.numSim;
-                S=addstruct(S,D);
-            end;
-            
-            subplot(1,3,ex);
-            if (ex==1)
-                lineplot(D.omega,D.propCorr,'split',D.methodStr,'style_thickline','leg','auto','subset',~strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
-            else
-                lineplot(D.omega,D.propCorr,'split',D.methodStr,'style_thickline','subset',~strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
-            end;
-            hold on;
-            lineplot(D.omega,D.propCorr,'split',D.methodStr,'linestyle',':','linecolor','k','subset',strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
-            hold off;
-            set(gca,'YLim',[0.4 1]);
-            drawline(0.5,'dir','horz');
-        end;
-        set(gcf,'PaperPosition',[0 0 12 3]);
-        wysiwyg;
-    case 'Figure_rsa_crossval'
-        filesNames={'rsan','pcm'};
-        methodStr={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq','cosine','loglikPCM'};
-        CAT.linecolor={'g','b','b','r','r','m','k'};
-        CAT.markercolor={'g','b','b','r','r','m','k'};
-        CAT.linewidth={2,2,2,2,2,2,1};
-        CAT.linestyle={'-','-',':','-',':','-',':'};
-        cd(baseDir);
-        for ex=1:3
-            D=rsa_testModelCompare('Util_summarizeFiles',ex,filesNames);
-            if (~isempty(D))
-                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr);
-                subplot(1,3,ex);
-                if (ex==1)
-                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
-                        'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',D.method>0);
-                else
-                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
-                        'CAT',CAT,'errorfcn',[],'subset',D.method>0);
-                end;
-                set(gca,'YLim',[0.4 1]);
-                drawline(0.5,'dir','horz');
-            end;
-        end;
-        set(gcf,'PaperPosition',[0 0 12 3]);
-        wysiwyg;
-    case 'Figure_rsa_weight'           % Figure 6
-        filesNames={'rsan','pcm'};
-        methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
-        CAT.linecolor={'b','r','b','r','k'};
-        CAT.markercolor={'b','r','b','r','k'};
-        CAT.linewidth={2,2,2,2,1};
-        CAT.linestyle={'-','-','--','--',':'};
-        cd(baseDir);
-        for ex=1:3
-            D=rsa_testModelCompare('Util_summarizeFiles',ex,filesNames,methodStr);
-            
-            if (~isempty(D))
-                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr);
-                subplot(1,3,ex);
-                if (ex==1)
-                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
-                        'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',D.method>0);
-                else
-                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
-                        'CAT',CAT,'errorfcn',[],'subset',D.method>0);
-                end;
-                set(gca,'YLim',[0.4 1]);
-                drawline(0.5,'dir','horz');
-            end;
-        end;
-        set(gcf,'PaperPosition',[0 0 12 3]);
-        wysiwyg;
-    case 'Figure_numberOfK'            % Figure 7
-        ex=1;
-        methodStr={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
-        CAT.linecolor={'m','b','b','b','r','r','k'};
-        CAT.markercolor={'m','b','b','b','r','r','k'};
-        CAT.linewidth={2,2,2,2,2,2,1};
-        CAT.linestyle={'-',':','-','--','-','--',':'};
-        
-        T=[];
-        files=dir(sprintf('sim_numberOfK_Exp%d*',ex));
-        for i=1:length(files)
-            R=load(files(i).name);
-            T=addstruct(T,R.T);
-        end;
-        T=rsa_testModelCompare('Util_relabelMethods',T,methodStr);
-        lineplot(T.numCond,T.propCorr,'split',T.method,'style_thickline',...
-            'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',T.method>0);
-        set(gca,'YLim',[0.55 0.8]);
-        set(gcf,'PaperPosition',[0 0 4 4]);
-        wysiwyg;
-    case 'predict_bestMethods' % fast way to approximate which method will work better...
-        N=10000;
-        M=varargin{1};  % cell array of the two models to compare
-        noise = 0.1;    % Noise variance on distances (under the null)
-        wNoiseDist = [];      % Noise structure assumed for whitening
-        numPart=5;      % Number of partitions
-        P = 20;         % Number of voxels
-        vararginoptions(varargin(2:end),{'noise','numPart','N','P','wNoiseDist'});
-        K = size(squareform(M{1}.RDM));
-        C=pcm_indicatorMatrix('allpairs',[1:K]);
-        
-        if (isscalar(noise))
-            noise = noise * eye(K);
-        end;
-        
-        % This is the covariance that is used to induce noise into the
-        % distances
-        XiM = C*noise*C';
-        Var= 2/P * XiM.*XiM;
-        A = cholcov(Var);
-        
-        % This is the covariance that is used to prewhiten the data
-        if (isempty(wNoiseDist))
-            wNoiseDist = (C*C').^2; % Use i.i.d assumption for whitening
-        end
-        [V,L]=eig(wNoiseDist);
-        l=real(diag(L));
-        sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
-        
-        for i=1:3
-            raw   = normrnd(0,1,N,size(M{1}.RDM,2));
-            
-            % Non-Crossvalidated
-            epsilon = raw * A ;
-            if (i<3)    % If simulation 1 or 2 - add true signal
-                data = bsxfun(@plus,epsilon,M{i}.RDM); % Add the true signal 
-            else 
-                data = epsilon; 
-            end;
-            data = bsxfun(@plus,data,diag(XiM)'); % Add the bias
-            model = [M{1}.RDM;M{2}.RDM];
-            data0 = bsxfun(@minus,data,mean(data,2));
-            model0 = bsxfun(@minus,model,mean(model,2));
-            
-            r{1}=corrN((data0)',model0');
-            r{2}=corrN((data0*sq)',(model0*sq)');
-            
-            % Crossvalidated
-            data = epsilon * sqrt(numPart/(numPart-1)); % Inflation of noise
-            if (i<3)    % If simulation 1 or 2 - add true signal
-                data = bsxfun(@plus,data,M{i}.RDM); % Add the true signal 
-            end; 
-            
-            r{3}=corrN((data)',model');
-            r{4}=corrN((data*sq)',(model*sq)');
-            
-            if (i<3) 
-                tM = i;
-                fM = 3-i;
-            
-                for j=1:4
-                    r{j}=round(r{j},5);
-                    correct(j,i)=sum(r{j}(:,tM)>r{j}(:,fM))+0.5*sum(r{j}(:,tM)==r{j}(:,fM));
-                    model2(j,i)=sum(r{j}(:,2)>r{j}(:,1))+0.5*sum(r{j}(:,1)==r{j}(:,2));
-                end;
-            else % Null model 
-                for j=1:4
-                    bias(j) = sum(r{j}(:,2)>r{j}(:,1))+0.5*sum(r{j}(:,1)==r{j}(:,2)); 
-                end; 
-            end; 
-        end;
-        bias = bias/N; 
-        correct  = correct/N;
-        correctM = mean(correct,2);
-        model2 = mean(model2/N,2);
-        varargout={correctM,bias,model2,correct(:,1),correct(:,2)};
-    case 'Figure_crossval_noncrossval' % Figure 4
+    case 'Figure_crossval_noncrossval' % Figure 4: RDM correlation vs RDM cosine similarity
         CAT.linecolor={'b','r','b','r'};
         CAT.markercolor={'b','r','b','r'};
         CAT.linewidth={2,2,2,2};
@@ -485,6 +265,267 @@ switch (what)
         figure(2);
         set(gcf,'PaperPosition',[2 2 10 5]);
         wysiwyg;
+    case 'Figure_covariances'          % Figure 5: Covariance matrices
+        figure;
+        sc = [0 0.14];
+        subplot(2,3,1);
+        G=diag([0 0 0 0 0]);
+        nC =5;
+        H=eye(nC)-ones(nC)/nC;
+        C=indicatorMatrix('allpairs',[1:nC]);
+        d = (diag(C*G*C'));
+        D = squareform(d);
+        covD = rsa_varianceLDC(d,C,1,8,10);
+        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc);
+        axis equal;
+        set(gca,'YTick',[],'XTick',[]);
+        
+        subplot(2,3,4);
+        G=diag([1 0.5 0 0 0])/20;
+        d = (diag(C*G*C'));
+        D = squareform(d);
+        covD = rsa_varianceLDC(d,C,1,8,10);
+        imagesc_rectangle(sqrt(covD),'YDir','reverse','MAP',cmapCov,'scale',sc);
+        axis equal;
+        set(gca,'YTick',[],'XTick',[]);
+        
+        subplot(2,3,[2 3 5 6]); % 20 distance Figure
+        nC =20;
+        colormap(cmapCov);
+        C=indicatorMatrix('allpairs',[1:nC]);
+        covD = rsa_varianceLDC(zeros(size(C,1),1),C,1,8,10);
+        imagesc(sqrt(covD),sc);
+        axis equal;
+        set(gca,'YTick',[],'XTick',[]);
+    case 'Figure_rsa_weight'           % Figure 6: Comparision of methods in Exp 1-3
+        filesNames={'rsan','pcm'};
+        methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
+        CAT.linecolor={'b','r','b','r','k'};
+        CAT.markercolor={'b','r','b','r','k'};
+        CAT.linewidth={2,2,2,2,1};
+        CAT.linestyle={'-','-','--','--',':'};
+        cd(baseDir);
+        for ex=1:3
+            D=rsa_testModelCompare('Util_summarizeFiles',ex,filesNames,methodStr);
+            
+            if (~isempty(D))
+                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr);
+                subplot(1,3,ex);
+                if (ex==1)
+                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
+                        'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',D.method>0);
+                else
+                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
+                        'CAT',CAT,'errorfcn',[],'subset',D.method>0);
+                end;
+                set(gca,'YLim',[0.4 1]);
+                drawline(0.5,'dir','horz');
+            end;
+        end;
+        set(gcf,'PaperPosition',[0 0 12 3]);
+        wysiwyg;
+    case 'Figure_numberOfK'            % Figure 7: Number of Conditions 
+        ex=1;
+        methodStr={'spearman','pearson','pearsonNc','pearsonWNc','cosine','cosineWNull','loglikPCM'};
+        CAT.linecolor={'m','b','b','b','r','r','k'};
+        CAT.markercolor={'m','b','b','b','r','r','k'};
+        CAT.linewidth={2,2,2,2,2,2,1};
+        CAT.linestyle={'-',':','-','--','-','--',':'};
+        
+        T=[];
+        files=dir(sprintf('sim_numberOfK_Exp%d*',ex));
+        for i=1:length(files)
+            R=load(files(i).name);
+            T=addstruct(T,R.T);
+        end;
+        T=rsa_testModelCompare('Util_relabelMethods',T,methodStr);
+        lineplot(T.numCond,T.propCorr,'split',T.method,'style_thickline',...
+            'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',T.method>0);
+        set(gca,'YLim',[0.55 0.8]);
+        set(gcf,'PaperPosition',[0 0 4 4]);
+        wysiwyg;
+    case 'Figure_R6_Spatialcorr'       % Figure R6: Sparial covariance
+        
+        %methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
+        methodStr={'PCM','pearson','whitened pearson','cosine','whitened cosine'};
+        legend_order = [5 1 3 2 4];
+%         CAT.linecolor={'b','r','b','r','k'};
+%         CAT.markercolor={'b','r','b','r','k'};
+%         CAT.linewidth={2,2,2,2,1};
+%         CAT.linestyle={'-','-','--','--',':'};
+        
+        CAT.linecolor={'k','b','b','r','r'};
+        CAT.markercolor={'k','b','b','r','r'};
+        CAT.linewidth={1,2,2,2,2};
+        CAT.linestyle={':','-','--','-','--'};
+        
+        D=[];
+        for s = [0:5]
+            load(fullfile(baseDir,sprintf('sim_sigP_%d_Exp2a.mat',s)))
+            T.s = s*ones(size(T.method));
+            T.propCorr=T.propCorr(legend_order);
+            T.methodStr=T.methodStr(legend_order);
+            D=addstruct(D,T);
+        end
+        %Fig = figure;
+        hold all
+        set(gca,'YLim',[0.4 1]);
+        set(gca,'XLim',[0 5]);
+        set(gca,'fontname','arial')
+        drawline(0.5,'dir','horz','linestyle',':');
+        lineplot(D.s,D.propCorr,'split',D.method,'style_thickline',...
+                        'leg',methodStr,'leglocation','southwest','CAT',CAT,'errorfcn',[],'subset',D.method>0);
+        set(gca,'YLim',[0.4 1]);
+        ylabel('Model selection accuracy');
+        xlabel('Kernel width');
+        set(gcf,'PaperPosition',[0 0 4 3],'PaperSize',[4 3]);
+        wysiwyg;
+        
+        print -dpdf Figure_R6.pdf -r1000
+        %print(Fig,fullfile('Figure_R6'),'-dpdf','-r1000','-bestfit') %dpdf
+
+    case 'Figure_rsa_pcm'
+        filesNames={'rsa','pcm'};
+        cd(baseDir);
+        for ex=1:3
+            
+            T=[];
+            S=[];
+            
+            % Load RSA files
+            for f=1:2
+                files=dir(sprintf('sim_%s_Exp%d*',filesNames{f},ex));
+                for i=1:length(files)
+                    R=load(files(i).name);
+                    [Num,om]=pivottable(R.U.omega,[],R.U.sig_hat,'length');
+                    for o=1:length(om)
+                        R.T.numSim(R.T.omega==om(o),1)=Num(o);
+                    end;
+                    T=addstruct(T,R.T);
+                end;
+                T.omega = round(T.omega,3);
+                D=tapply(T,{'method','methodStr','omega'},{T.propCorr.*T.numSim,'sum','name','numCorr'},{T.numSim,'sum','name','numSim'});
+                D.propCorr = D.numCorr ./ D.numSim;
+                S=addstruct(S,D);
+            end;
+            
+            subplot(1,3,ex);
+            if (ex==1)
+                lineplot(D.omega,D.propCorr,'split',D.methodStr,'style_thickline','leg','auto','subset',~strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
+            else
+                lineplot(D.omega,D.propCorr,'split',D.methodStr,'style_thickline','subset',~strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
+            end;
+            hold on;
+            lineplot(D.omega,D.propCorr,'split',D.methodStr,'linestyle',':','linecolor','k','subset',strcmp(D.methodStr,'loglikPCM'),'errorfcn',[]);
+            hold off;
+            set(gca,'YLim',[0.4 1]);
+            drawline(0.5,'dir','horz');
+        end;
+        set(gcf,'PaperPosition',[0 0 12 3]);
+        wysiwyg;
+    case 'Figure_rsa_crossval'
+        filesNames={'rsan','pcm'};
+        methodStr={'spearman','pearson','pearsonNc','pearsonSq','pearsonNcSq','cosine','loglikPCM'};
+        CAT.linecolor={'g','b','b','r','r','m','k'};
+        CAT.markercolor={'g','b','b','r','r','m','k'};
+        CAT.linewidth={2,2,2,2,2,2,1};
+        CAT.linestyle={'-','-',':','-',':','-',':'};
+        cd(baseDir);
+        for ex=1:3
+            D=rsa_testModelCompare('Util_summarizeFiles',ex,filesNames);
+            if (~isempty(D))
+                D=rsa_testModelCompare('Util_relabelMethods',D,methodStr);
+                subplot(1,3,ex);
+                if (ex==1)
+                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
+                        'leg',methodStr,'CAT',CAT,'errorfcn',[],'subset',D.method>0);
+                else
+                    lineplot(D.omega,D.propCorr,'split',D.method,'style_thickline',...
+                        'CAT',CAT,'errorfcn',[],'subset',D.method>0);
+                end;
+                set(gca,'YLim',[0.4 1]);
+                drawline(0.5,'dir','horz');
+            end;
+        end;
+        set(gcf,'PaperPosition',[0 0 12 3]);
+        wysiwyg;
+    case 'predict_bestMethods' % fast way to approximate which method will work better...
+        N=10000;
+        M=varargin{1};  % cell array of the two models to compare
+        noise = 0.1;    % Noise variance on distances (under the null)
+        wNoiseDist = [];      % Noise structure assumed for whitening
+        numPart=5;      % Number of partitions
+        P = 20;         % Number of voxels
+        vararginoptions(varargin(2:end),{'noise','numPart','N','P','wNoiseDist'});
+        K = size(squareform(M{1}.RDM));
+        C=pcm_indicatorMatrix('allpairs',[1:K]);
+        
+        if (isscalar(noise))
+            noise = noise * eye(K);
+        end;
+        
+        % This is the covariance that is used to induce noise into the
+        % distances
+        XiM = C*noise*C';
+        Var= 2/P * XiM.*XiM;
+        A = cholcov(Var);
+        
+        % This is the covariance that is used to prewhiten the data
+        if (isempty(wNoiseDist))
+            wNoiseDist = (C*C').^2; % Use i.i.d assumption for whitening
+        end
+        [V,L]=eig(wNoiseDist);
+        l=real(diag(L));
+        sq = V*bsxfun(@rdivide,V',sqrt(l)); % Slightly faster than sq = V*diag(1./sqrt(l))*V';
+        
+        for i=1:3
+            raw   = normrnd(0,1,N,size(M{1}.RDM,2));
+            
+            % Non-Crossvalidated
+            epsilon = raw * A ;
+            if (i<3)    % If simulation 1 or 2 - add true signal
+                data = bsxfun(@plus,epsilon,M{i}.RDM); % Add the true signal 
+            else 
+                data = epsilon; 
+            end;
+            data = bsxfun(@plus,data,diag(XiM)'); % Add the bias
+            model = [M{1}.RDM;M{2}.RDM];
+            data0 = bsxfun(@minus,data,mean(data,2));
+            model0 = bsxfun(@minus,model,mean(model,2));
+            
+            r{1}=corrN((data0)',model0');
+            r{2}=corrN((data0*sq)',(model0*sq)');
+            
+            % Crossvalidated
+            data = epsilon * sqrt(numPart/(numPart-1)); % Inflation of noise
+            if (i<3)    % If simulation 1 or 2 - add true signal
+                data = bsxfun(@plus,data,M{i}.RDM); % Add the true signal 
+            end; 
+            
+            r{3}=corrN((data)',model');
+            r{4}=corrN((data*sq)',(model*sq)');
+            
+            if (i<3) 
+                tM = i;
+                fM = 3-i;
+            
+                for j=1:4
+                    r{j}=round(r{j},5);
+                    correct(j,i)=sum(r{j}(:,tM)>r{j}(:,fM))+0.5*sum(r{j}(:,tM)==r{j}(:,fM));
+                    model2(j,i)=sum(r{j}(:,2)>r{j}(:,1))+0.5*sum(r{j}(:,1)==r{j}(:,2));
+                end;
+            else % Null model 
+                for j=1:4
+                    bias(j) = sum(r{j}(:,2)>r{j}(:,1))+0.5*sum(r{j}(:,1)==r{j}(:,2)); 
+                end; 
+            end; 
+        end;
+        bias = bias/N; 
+        correct  = correct/N;
+        correctM = mean(correct,2);
+        model2 = mean(model2/N,2);
+        varargout={correctM,bias,model2,correct(:,1),correct(:,2)};
+
     case 'Bias_Scenario3' % Why does a bias arise in Scenario 3 - despite the fact that noise is iid?
         K=4; 
         P=10; 
@@ -528,6 +569,30 @@ switch (what)
        end; 
        fprintf('For Model 1 (N): %2.3f  %2.3f   %2.3f \n',m1n(1),m1n(2),mean(m1n)); 
        fprintf('For Model 1 (W): %2.3f  %2.3f   %2.3f \n',m1w(1),m1w(2),mean(m1w)); 
+    case 'confInterval_Spatialcorr'
+        s=4;
+        
+        methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
+        load(fullfile(baseDir,sprintf('sim_sigP_%d_Exp2a.mat',s)))
+        N = size(U.truemodel,1);
+        alpha = 0.05;
+        ts = tinv([alpha/2  1-alpha/2],N-1);      % T-Score
+        numModels = length(unique(U.truemodel));
+        for m=1:length(methodStr)
+            meancorrect = nan(N,1);
+            for n=1:N
+                val = U.(methodStr{m})(n,:);
+                trueval = val(U.truemodel(n));
+                val(U.truemodel(n))=[];
+                meancorrect(n,:) = (sum(trueval>val) + ...
+                    sum(trueval==val)*0.5)./(numModels-1);
+            end;
+            K.propCorr(m,1)  = mean(meancorrect);
+            K.standardError(m,1)  = std(meancorrect)/N;
+            K.CI(m,:) = K.propCorr(m,1)+ts*K.standardError(m,1);
+            K.method(m,1)    = m;
+            K.methodStr{m,1} = methodStr{m};
+        end;
 end;
 
 function r=cosineW(A,B,Sig); % Weighted cosine similarity measure

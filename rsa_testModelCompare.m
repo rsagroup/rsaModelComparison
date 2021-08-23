@@ -1,11 +1,10 @@
 function varargout=rsa_testModelCompare(what,varargin)
-% Testing for Constructing and fitting component models
-% Define optional parameter
-% pt.rootPath='/Users/joern/Desktop/rsaworkshop/rsatoolbox.v.2a/Demos/Demo_component';
-% Opt.rootPath='/Users/joern/Talks/2015/02_Demo_component';
-% Opt.rootPath='/Users/jdiedrichsen/Talks/2015/02_Demo_component';
-% tendigitDir='/Users/joern/Talks/2015/07_COSMO/practical';
-% chordDir='/Users/joern/Projects/ChordPatternDist/analysis';
+% Testing different model RSA comparision methods as studied in Diedrichsen
+% et al. (2017). 
+% Running simulations and producing Figures. 
+
+
+% Setting basedir for data files: change. 
 baseDir = '/Users/jdiedrichsen/Dropbox (Diedrichsenlab)/Projects/modelCompare';
 
 % Use develop branch of the RSA matlab toolbox at https://github.com/rsagroup/rsatoolbox_matlab
@@ -17,7 +16,7 @@ import rsa.rdm.*;
 %  Make the representational model matrices from features
 switch (what)
     % Prepare 3 different models and bring them into the correct format
-    case 'prep5FingerModel'     % Prepare models for Experiment 1 
+    case 'prep5FingerModel'     % Prepare models for Experiment 1 (done) 
         M(1)=load(fullfile(baseDir,'Muscle_model.mat'));
         M(2)=load(fullfile(baseDir,'Naturalstats_model.mat'));
         for i=1:length(M)
@@ -25,7 +24,7 @@ switch (what)
         end;
         save(fullfile(baseDir,'Model_fiveFinger.mat'),'M');
         varargout={M};
-    case 'prepChord'            % Prepare models for Experiment 2 
+    case 'prepChord'            % Prepare models for Experiment 2 (done) 
         % Standardisation, but no absolute value
         D=load(fullfile(chordDir,'distance_emg.mat'));
         M(1).RDM=mean(D.dist(D.method==6,:));
@@ -40,7 +39,7 @@ switch (what)
         end;
         save(fullfile(baseDir,'Model_chords.mat'),'M');
         varargout={M};
-    case 'prepStartA'           % Prepare models for Experiment 3 
+    case 'prepStartA'           % Prepare models for Experiment 3 (done) 
         load(fullfile(baseDir,'START_B_visualiseRDMs','modelRDMs_A2.mat'));
         M=modelRDMs_struct;
         indx=[];
@@ -920,121 +919,6 @@ switch (what)
             D.method(a)=i;
         end;
         varargout={D};
-    case 'confInterval_Spatialcorr'
-        s=4;
-        
-        methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
-        load(fullfile(baseDir,sprintf('sim_sigP_%d_Exp2a.mat',s)))
-        N = size(U.truemodel,1);
-        alpha = 0.05;
-        ts = tinv([alpha/2  1-alpha/2],N-1);      % T-Score
-        numModels = length(unique(U.truemodel));
-        for m=1:length(methodStr)
-            meancorrect = nan(N,1);
-            for n=1:N
-                val = U.(methodStr{m})(n,:);
-                trueval = val(U.truemodel(n));
-                val(U.truemodel(n))=[];
-                meancorrect(n,:) = (sum(trueval>val) + ...
-                    sum(trueval==val)*0.5)./(numModels-1);
-            end;
-            K.propCorr(m,1)  = mean(meancorrect);
-            K.standardError(m,1)  = std(meancorrect)/N;
-            K.CI(m,:) = K.propCorr(m,1)+ts*K.standardError(m,1);
-            K.method(m,1)    = m;
-            K.methodStr{m,1} = methodStr{m};
-        end;
-    case 'Figure_R6_Spatialcorr'
-        
-        %methodStr={'pearsonNc','cosine','pearsonWNc','cosineWNull','loglikPCM'};
-        methodStr={'PCM','pearson','whitened pearson','cosine','whitened cosine'};
-        legend_order = [5 1 3 2 4];
-%         CAT.linecolor={'b','r','b','r','k'};
-%         CAT.markercolor={'b','r','b','r','k'};
-%         CAT.linewidth={2,2,2,2,1};
-%         CAT.linestyle={'-','-','--','--',':'};
-        
-        CAT.linecolor={'k','b','b','r','r'};
-        CAT.markercolor={'k','b','b','r','r'};
-        CAT.linewidth={1,2,2,2,2};
-        CAT.linestyle={':','-','--','-','--'};
-        
-        D=[];
-        for s = [0:5]
-            load(fullfile(baseDir,sprintf('sim_sigP_%d_Exp2a.mat',s)))
-            T.s = s*ones(size(T.method));
-            T.propCorr=T.propCorr(legend_order);
-            T.methodStr=T.methodStr(legend_order);
-            D=addstruct(D,T);
-        end
-        %Fig = figure;
-        hold all
-        set(gca,'YLim',[0.4 1]);
-        set(gca,'XLim',[0 5]);
-        set(gca,'fontname','arial')
-        drawline(0.5,'dir','horz','linestyle',':');
-        lineplot(D.s,D.propCorr,'split',D.method,'style_thickline',...
-                        'leg',methodStr,'leglocation','southwest','CAT',CAT,'errorfcn',[],'subset',D.method>0);
-        set(gca,'YLim',[0.4 1]);
-        ylabel('Model selection accuracy');
-        xlabel('Kernel width');
-        set(gcf,'PaperPosition',[0 0 4 3],'PaperSize',[4 3]);
-        wysiwyg;
-        
-        print -dpdf Figure_R6.pdf -r1000
-        %print(Fig,fullfile('Figure_R6'),'-dpdf','-r1000','-bestfit') %dpdf
-    case 'Figure_numReg' % This is the encoding model figure for different numbers of regressors
-        cd(baseDir);
-        methods={'encodeReg','encodePCM'};   %,'encodeRidge'
-        indx = {1,[2 3],[4 5]};
-        corrAx=[0.15 0.015 0.01];
-        R2Ax = [0.015 0.00012 0.00008];
-        for ex=1:3
-            T=[];
-            for m=1:length(methods)
-                files=dir(sprintf('sim_%s_Exp%d*',methods{m},ex));
-                for i=1:length(files)
-                    R=load(files(i).name);
-                    Num=size(R.U.sig_hat,1);
-                    N = length(R.T.omega);
-                    R.T.numSim  = ones(N,1)*Num;
-                    R.T.method  = ones(N,1)*m;
-                    T=addstruct(T,R.T);
-                end;
-            end;
-            if (std(T.omega)>0.0001)
-                warning('not the same simulation params');
-            end;
-            D=tapply(T,{'method','numReg'},{T.numSim,'sum','name','numSim'},...
-                {T.propCorrR2.*T.numSim,'sum','name','numCorrR2'},...
-                {T.propCorrCorr.*T.numSim,'sum','name','numCorrCorr'},...
-                {T.meanR2.*T.numSim,'sum','name','sumR2'},...
-                {T.meanCorr.*T.numSim,'sum','name','sumCorr'});
-            D.propCorrR2   = D.numCorrR2 ./ D.numSim;
-            D.propCorrCorr = D.numCorrCorr ./ D.numSim;
-            D.meanR2       = D.sumR2 ./ D.numSim;
-            D.meanCorr     = D.sumCorr ./ D.numSim;
-            
-            subplot(3,5,indx{ex});
-            lineplot(D.numReg,D.meanR2,'split',D.method,'style_thickline');
-            drawline(0,'dir','horz');
-            set(gca,'YLim',[0 R2Ax(ex)]);
-            
-            
-            subplot(3,5,indx{ex}+5);
-            lineplot(D.numReg,D.meanCorr,'split',D.method,'style_thickline','linestyle',':');
-            set(gca,'YLim',[0 corrAx(ex)]);
-            
-            subplot(3,5,indx{ex}+10);
-            lineplot(D.numReg,[D.propCorrR2],'split',D.method,'style_thickline','leg','auto');
-            hold on;
-            lineplot(D.numReg,[D.propCorrCorr],'split',D.method,'style_thickline','linestyle',':');
-            hold off;
-            drawline(0.5,'dir','horz');
-            set(gca,'YLim',[0.45 0.81]);
-        end;
-        set(gcf,'PaperPosition',[0 0 12 9]);
-        wysiwyg;
     case 'Figure_rsaVarianceLDC'
         cd(baseDir);
         
@@ -1120,7 +1004,7 @@ switch (what)
         end;
         set(gcf,'PaperPosition',[0 0 12 3]);
         wysiwyg;
-    case 'Figure_models'
+    case 'Figure_models'          % Figure 4 in Diedrichsen & Kriegeskorte, 2017
         load(fullfile(baseDir,'Model_fiveFinger.mat'));
         subplot(2,3,1);
         rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1);
@@ -1138,6 +1022,58 @@ switch (what)
         rsa.fig.imageRDMs(M{1},'transformfcn','ssqrt','singleRDM',1);
         subplot(2,3,6);
         rsa.fig.imageRDMs(M{7},'transformfcn','ssqrt','singleRDM',1);
+    case 'Figure_numReg'          % Figure 5 in Diedrichsen & Kriegeskorte, 2017
+        cd(baseDir);
+        methods={'encodeReg','encodePCM'};   %,'encodeRidge'
+        indx = {1,[2 3],[4 5]};
+        corrAx=[0.15 0.015 0.01];
+        R2Ax = [0.015 0.00012 0.00008];
+        for ex=1:3
+            T=[];
+            for m=1:length(methods)
+                files=dir(sprintf('sim_%s_Exp%d*',methods{m},ex));
+                for i=1:length(files)
+                    R=load(files(i).name);
+                    Num=size(R.U.sig_hat,1);
+                    N = length(R.T.omega);
+                    R.T.numSim  = ones(N,1)*Num;
+                    R.T.method  = ones(N,1)*m;
+                    T=addstruct(T,R.T);
+                end;
+            end;
+            if (std(T.omega)>0.0001)
+                warning('not the same simulation params');
+            end;
+            D=tapply(T,{'method','numReg'},{T.numSim,'sum','name','numSim'},...
+                {T.propCorrR2.*T.numSim,'sum','name','numCorrR2'},...
+                {T.propCorrCorr.*T.numSim,'sum','name','numCorrCorr'},...
+                {T.meanR2.*T.numSim,'sum','name','sumR2'},...
+                {T.meanCorr.*T.numSim,'sum','name','sumCorr'});
+            D.propCorrR2   = D.numCorrR2 ./ D.numSim;
+            D.propCorrCorr = D.numCorrCorr ./ D.numSim;
+            D.meanR2       = D.sumR2 ./ D.numSim;
+            D.meanCorr     = D.sumCorr ./ D.numSim;
+            
+            subplot(3,5,indx{ex});
+            lineplot(D.numReg,D.meanR2,'split',D.method,'style_thickline');
+            drawline(0,'dir','horz');
+            set(gca,'YLim',[0 R2Ax(ex)]);
+            
+            
+            subplot(3,5,indx{ex}+5);
+            lineplot(D.numReg,D.meanCorr,'split',D.method,'style_thickline','linestyle',':');
+            set(gca,'YLim',[0 corrAx(ex)]);
+            
+            subplot(3,5,indx{ex}+10);
+            lineplot(D.numReg,[D.propCorrR2],'split',D.method,'style_thickline','leg','auto');
+            hold on;
+            lineplot(D.numReg,[D.propCorrCorr],'split',D.method,'style_thickline','linestyle',':');
+            hold off;
+            drawline(0.5,'dir','horz');
+            set(gca,'YLim',[0.45 0.81]);
+        end;
+        set(gcf,'PaperPosition',[0 0 12 9]);
+        wysiwyg;
     case 'Figure_regularisation'  % Figure 6 in Diedrichsen & Kriegeskorte, 2017
         T=[];
         files=dir('sim_encodeRegularise_Exp2*');
